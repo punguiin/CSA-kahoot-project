@@ -12,5 +12,7 @@ public interface UserDAO {
 
     Optional<User> findByUsername(String username);
 
+    Optional<User> findByUsernameAndPassword(String username, String password);
+
     int deleteAll();
 }

@@ -1,11 +1,5 @@
-// TypeScript port of the backend's custom binary packet protocol (kahoot.protocol).
-// The browser speaks the EXACT same wire format over WebSocket binary frames:
-//   [magic(1)=0x13][src(1)][pktId(8)][wLen(4)][headCRC(2)] [message(wLen)] [tailCRC(2)]
-// with message = [cType(4)][connId(4)][utf8 JSON payload].
-
-// Const object (not an enum) so the build's erasableSyntaxOnly rule is satisfied.
 export const MessageType = {
-    // requests (client -> server)
+
     REQ_CREATE_ROOM: 1,
     REQ_JOIN_ROOM: 2,
     REQ_START_QUIZ: 3,
@@ -13,17 +7,19 @@ export const MessageType = {
     REQ_NEXT_QUESTION: 5,
     REQ_END_ROUND: 6,
     REQ_GET_LEADERBOARD: 7,
-    // replies (server -> acting client)
+    REQ_REJOIN: 8,
+
     ROOM_CREATED: 20,
     JOIN_ACCEPTED: 21,
     ANSWER_RESULT: 22,
     ERROR: 23,
-    // events (server -> whole room)
+
     PLAYER_JOINED: 40,
     QUESTION: 41,
     LEADERBOARD: 42,
     GAME_FINISHED: 43,
     PLAYER_LEFT: 44,
+    ROOM_CLOSED: 45,
 } as const;
 
 export type MessageType = typeof MessageType[keyof typeof MessageType];
@@ -41,7 +37,7 @@ const HEADER_LEN = 16;
 const CRC_TABLE = buildCrcTable();
 
 function buildCrcTable(): Uint16Array {
-    // Same CCITT (0xA001 reflected) polynomial as Crc16.java, generated to avoid a 256-line literal.
+
     const table = new Uint16Array(256);
     for (let i = 0; i < 256; i++) {
         let crc = i;

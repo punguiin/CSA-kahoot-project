@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class UserDAOImpl implements UserDAO {
@@ -78,6 +80,33 @@ public class UserDAOImpl implements UserDAO {
     }
 
     @Override
+    public List<User> findAll() {
+        try (PreparedStatement ps = connection.prepareStatement("SELECT * FROM users ORDER BY id")) {
+            List<User> users = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    users.add(mapUser(rs));
+                }
+            }
+            return users;
+        } catch (SQLException e) {
+            throw new RuntimeException("Can't list users", e);
+        }
+    }
+
+    @Override
+    public int updateStatus(int id, String status) {
+        try (PreparedStatement ps = connection.prepareStatement(
+                "UPDATE users SET status = ? WHERE id = ?")) {
+            ps.setString(1, status);
+            ps.setInt(2, id);
+            return ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Can't update status for user: " + id, e);
+        }
+    }
+
+    @Override
     public int deleteAll() {
         try (PreparedStatement ps = connection.prepareStatement("DELETE FROM users")) {
             return ps.executeUpdate();
@@ -91,7 +120,8 @@ public class UserDAOImpl implements UserDAO {
                 rs.getInt("id"),
                 rs.getString("username"),
                 rs.getString("password_hash"),
-                rs.getString("role")
+                rs.getString("role"),
+                rs.getString("status")
         );
     }
 

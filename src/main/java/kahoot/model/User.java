@@ -4,20 +4,33 @@ import java.util.Objects;
 
 public class User {
 
+    public static final String ACTIVE = "ACTIVE";
+    public static final String BLOCKED = "BLOCKED";
+
     private Integer id;
     private String username;
     private String passwordHash;
     private String role;
+    private String status;
 
     public User(String username, String passwordHash, String role) {
-        this(null, username, passwordHash, role);
+        this(null, username, passwordHash, role, ACTIVE);
     }
 
     public User(Integer id, String username, String passwordHash, String role) {
+        this(id, username, passwordHash, role, ACTIVE);
+    }
+
+    public User(Integer id, String username, String passwordHash, String role, String status) {
         this.id = id;
         this.username = username;
         this.passwordHash = passwordHash;
         this.role = role;
+        this.status = status == null ? ACTIVE : status;
+    }
+
+    public String getStatus() {
+        return status;
     }
 
     public Integer getId() {

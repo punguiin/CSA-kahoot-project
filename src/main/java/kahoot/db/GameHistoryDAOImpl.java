@@ -1,6 +1,8 @@
 package kahoot.db;
 
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class GameHistoryDAOImpl implements GameHistoryDAO {
 
@@ -39,6 +41,30 @@ public class GameHistoryDAOImpl implements GameHistoryDAO {
             return 0;
         } catch (SQLException e) {
             throw new RuntimeException("Can't count game history for quiz: " + quizId, e);
+        }
+    }
+
+    @Override
+    public List<Entry> findRecent() {
+        try (PreparedStatement ps = connection.prepareStatement(
+                "SELECT h.quiz_id, q.title, h.played_at, h.winner_nickname, h.players_count "
+                        + "FROM game_history h LEFT JOIN quizzes q ON q.id = h.quiz_id "
+                        + "ORDER BY h.played_at DESC, h.id DESC")) {
+            List<Entry> entries = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String title = rs.getString(2);
+                    entries.add(new Entry(
+                            rs.getInt(1),
+                            title == null ? "—" : title,
+                            rs.getString(3),
+                            rs.getString(4),
+                            rs.getInt(5)));
+                }
+            }
+            return entries;
+        } catch (SQLException e) {
+            throw new RuntimeException("Can't list game history", e);
         }
     }
 

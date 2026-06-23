@@ -9,6 +9,10 @@ public interface QuizDAO {
 
     int insert(Quiz quiz);
 
+    void update(Quiz quiz);
+
+    List<Quiz> findAll();
+
     Optional<Quiz> findById(int id);
 
     List<Quiz> findByCreatorId(int creatorId);

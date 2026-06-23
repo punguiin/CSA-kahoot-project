@@ -5,6 +5,8 @@ import kahoot.db.GameHistoryDAO;
 import kahoot.db.GameHistoryDAOImpl;
 import kahoot.db.QuizDAO;
 import kahoot.db.QuizDAOImpl;
+import kahoot.db.UserDAO;
+import kahoot.db.UserDAOImpl;
 import kahoot.game.GameService;
 import kahoot.game.GameStateManager;
 import kahoot.net.ConnectionRegistry;
@@ -12,6 +14,7 @@ import kahoot.net.KahootServer;
 import kahoot.net.SessionDispatcher;
 import kahoot.protocol.IdentityCipher;
 import kahoot.protocol.MessageCipher;
+import kahoot.web.HttpApiServer;
 import kahoot.web.WebSocketServer;
 
 public class Main {
@@ -19,11 +22,13 @@ public class Main {
     public static void main(String[] args) throws Exception {
         int tcpPort = port("TCP_PORT", 9090);
         int wsPort = port("WS_PORT", 9092);
+        int httpPort = port("HTTP_PORT", 8090);
 
         DatabaseConnection db = new DatabaseConnection("kahoot.db");
         QuizDAO quizDao = new QuizDAOImpl(db.getConnection());
         GameHistoryDAO historyDao = new GameHistoryDAOImpl(db.getConnection());
-        DemoData.seedIfEmpty(quizDao);
+        UserDAO userDao = new UserDAOImpl(db.getConnection());
+        DemoData.seedIfEmpty(quizDao, userDao);
 
         GameStateManager gameStateManager = new GameStateManager();
         GameService gameService = new GameService(gameStateManager, quizDao, historyDao);
@@ -38,14 +43,20 @@ public class Main {
         WebSocketServer wsServer = new WebSocketServer(
                 wsPort, cipher, wsRegistry::register, wsDispatcher::onPacket, wsDispatcher::onDisconnect);
 
+        HttpApiServer httpServer = new HttpApiServer(
+                httpPort, quizDao, userDao, historyDao, gameStateManager, wsDispatcher::endRoom);
+
         tcpServer.start();
         wsServer.start();
+        httpServer.start();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Main: shutting down");
             tcpServer.stop();
             wsServer.stop();
+            httpServer.stop();
         }));
-        System.out.println("Main: Kahoot up — TCP/" + tcpServer.port() + " (custom client), WS/" + wsServer.port() + " (browser)");
+        System.out.println("Main: Kahoot up — TCP/" + tcpServer.port() + " (custom client), WS/"
+                + wsServer.port() + " (browser), HTTP/" + httpServer.port() + " (api)");
         wsServer.join();
     }
 

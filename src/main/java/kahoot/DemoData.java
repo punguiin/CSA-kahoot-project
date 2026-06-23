@@ -1,9 +1,11 @@
 package kahoot;
 
 import kahoot.db.QuizDAO;
+import kahoot.db.UserDAO;
 import kahoot.model.Answer;
 import kahoot.model.Question;
 import kahoot.model.Quiz;
+import kahoot.model.User;
 
 import java.util.List;
 
@@ -12,14 +14,18 @@ public final class DemoData {
     private DemoData() {
     }
 
-    public static void seedIfEmpty(QuizDAO quizDAO) {
-        if (quizDAO.findById(1).isPresent()) {
-            return;
+    public static void seedIfEmpty(QuizDAO quizDAO, UserDAO userDAO) {
+        if (userDAO.findByUsername("admin").isEmpty()) {
+            userDAO.insert(new User("admin", "admin", "ADMIN"));
+            userDAO.insert(new User("player", "player", "PLAYER"));
+            System.out.println("DemoData: seeded users (admin/admin, player/player)");
         }
-        for (Quiz quiz : demoQuizzes()) {
-            quizDAO.insert(quiz);
+        if (quizDAO.findById(1).isEmpty()) {
+            for (Quiz quiz : demoQuizzes()) {
+                quizDAO.insert(quiz);
+            }
+            System.out.println("DemoData: seeded demo quizzes");
         }
-        System.out.println("DemoData: seeded demo quizzes");
     }
 
     private static List<Quiz> demoQuizzes() {

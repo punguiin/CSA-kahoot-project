@@ -40,6 +40,23 @@ public class QuizDAOImpl implements QuizDAO {
     }
 
     @Override
+    public List<Quiz> findAll() {
+        try (PreparedStatement ps = connection.prepareStatement("SELECT * FROM quizzes ORDER BY id")) {
+            List<Quiz> quizzes = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Quiz quiz = mapQuiz(rs);
+                    quiz.setQuestions(loadQuestions(quiz.getId()));
+                    quizzes.add(quiz);
+                }
+            }
+            return quizzes;
+        } catch (SQLException e) {
+            throw new RuntimeException("Can't list quizzes", e);
+        }
+    }
+
+    @Override
     public Optional<Quiz> findById(int id) {
         try (PreparedStatement ps = connection.prepareStatement(
                 "SELECT * FROM quizzes WHERE id = ?")) {
@@ -75,13 +92,46 @@ public class QuizDAOImpl implements QuizDAO {
     }
 
     @Override
-    public int deleteById(int id) {
+    public void update(Quiz quiz) {
         try (PreparedStatement ps = connection.prepareStatement(
-                "DELETE FROM quizzes WHERE id = ?")) {
-            ps.setInt(1, id);
-            return ps.executeUpdate();
+                "UPDATE quizzes SET title = ?, description = ? WHERE id = ?")) {
+            ps.setString(1, quiz.getTitle());
+            ps.setString(2, quiz.getDescription());
+            ps.setInt(3, quiz.getId());
+            ps.executeUpdate();
+            deleteQuestions(quiz.getId());
+            for (Question q : quiz.getQuestions()) {
+                insertQuestion(q, quiz.getId());
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Can't update quiz: " + quiz, e);
+        }
+    }
+
+    @Override
+    public int deleteById(int id) {
+        try {
+            deleteQuestions(id);
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "DELETE FROM quizzes WHERE id = ?")) {
+                ps.setInt(1, id);
+                return ps.executeUpdate();
+            }
         } catch (SQLException e) {
             throw new RuntimeException("Can't delete quiz: " + id, e);
+        }
+    }
+
+    private void deleteQuestions(int quizId) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(
+                "DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ?)")) {
+            ps.setInt(1, quizId);
+            ps.executeUpdate();
+        }
+        try (PreparedStatement ps = connection.prepareStatement(
+                "DELETE FROM questions WHERE quiz_id = ?")) {
+            ps.setInt(1, quizId);
+            ps.executeUpdate();
         }
     }
 

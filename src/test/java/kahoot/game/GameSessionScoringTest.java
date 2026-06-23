@@ -142,6 +142,38 @@ class GameSessionScoringTest {
     }
 
     @Test
+    void selfPacedShouldAwardZeroAndAdvanceWhenTimeExpired() {
+        Question q1 = new Question(1, 1, "Q1", 10, List.of(correctAnswer, wrongAnswer));
+        Question q2 = new Question(2, 1, "Q2", 10, List.of(correctAnswer, wrongAnswer));
+        sut.setQuiz(new Quiz(1, "Geography", "desc", 1, List.of(q1, q2)));
+        sut.startSelfPaced();
+
+        Player alice = sut.getPlayers().get(0);
+        alice.setQuestionStartedAt(System.currentTimeMillis() - 11_000);
+
+        AnswerResult result = sut.submitSelfPaced("alice", correctAnswer.getId());
+
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(result.getPointsAwarded()).isZero();
+        assertThat(sut.progressOf("alice")).isEqualTo(1);
+    }
+
+    @Test
+    void selfPacedNoAnswerSentinelShouldScoreZeroAndAdvance() {
+        Question q1 = new Question(1, 1, "Q1", 10, List.of(correctAnswer, wrongAnswer));
+        Question q2 = new Question(2, 1, "Q2", 10, List.of(correctAnswer, wrongAnswer));
+        sut.setQuiz(new Quiz(1, "Geography", "desc", 1, List.of(q1, q2)));
+        sut.startSelfPaced();
+
+        AnswerResult result = sut.submitSelfPaced("bob", GameSession.NO_ANSWER);
+
+        assertThat(result.isAccepted()).isTrue();
+        assertThat(result.isCorrect()).isFalse();
+        assertThat(result.getPointsAwarded()).isZero();
+        assertThat(sut.progressOf("bob")).isEqualTo(1);
+    }
+
+    @Test
     void shouldHandleConcurrentAnswerSubmissionsWithoutLosingPoints() throws InterruptedException {
         Question question = new Question(1, 1, "Q1", 30, List.of(correctAnswer, wrongAnswer));
         Quiz quiz = new Quiz(1, "Geography", "desc", 1, List.of(question));

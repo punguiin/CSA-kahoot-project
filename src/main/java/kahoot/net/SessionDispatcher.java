@@ -223,6 +223,11 @@ public final class SessionDispatcher {
         gameStateManager.removeSession(pin);
     }
 
+    public void notifyClosed(String pin) {
+        broadcast(pin, MessageType.ROOM_CLOSED,
+                PayloadCodec.error("Сесію закрито через неактивність"));
+    }
+
     public void onDisconnect(int connId) {
         Identity identity = registry.unregister(connId);
         if (identity == null) {

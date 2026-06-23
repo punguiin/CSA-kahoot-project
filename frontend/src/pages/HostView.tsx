@@ -1,66 +1,47 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { gameClient, MessageType } from '../net/gameClient';
 
-interface WireQuestion {
-    pin: string;
-    index: number;
-    text: string;
-    timeLimit: number;
-    answers: { id: number; text: string }[];
-}
-
 interface BoardEntry { nickname: string; score: number; }
+interface RosterPlayer { nickname: string; score: number; }
 
-const SHAPES = [
-    <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white drop-shadow-md"><path d="M12 2L22 20H2Z" /></svg>,
-    <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white drop-shadow-md"><path d="M12 2L22 12L12 22L2 12Z" /></svg>,
-    <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white drop-shadow-md"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" /></svg>,
-    <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white drop-shadow-md"><path d="M3 3H21V21H3V3Z" /></svg>
-];
+type Phase = 'LOBBY' | 'RUNNING' | 'FINISHED';
 
-const COLORS = [
-    "bg-red-500 hover:bg-red-600 border-red-700",
-    "bg-blue-500 hover:bg-blue-600 border-blue-700",
-    "bg-yellow-500 hover:bg-yellow-600 border-yellow-600",
-    "bg-green-500 hover:bg-green-600 border-green-700"
-];
-
-const Game = () => {
+const HostView = () => {
+    const { pin } = useParams();
     const navigate = useNavigate();
-    const [question, setQuestion] = useState<WireQuestion | null>(gameClient.lastQuestion);
-    const [timeLeft, setTimeLeft] = useState<number>(gameClient.lastQuestion?.timeLimit ?? 0);
-    const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-    const [view, setView] = useState<'QUESTION' | 'LEADERBOARD' | 'PODIUM'>('QUESTION');
+
+    const [phase, setPhase] = useState<Phase>('LOBBY');
+    const [players, setPlayers] = useState<string[]>([]);
     const [leaderboard, setLeaderboard] = useState<BoardEntry[]>([]);
-    const [errorMsg, setErrorMsg] = useState('');
+    const [starting, setStarting] = useState(false);
     const [closed, setClosed] = useState(false);
 
     useEffect(() => {
-        const offQuestion = gameClient.on(MessageType.QUESTION, (q: WireQuestion) => {
-            setQuestion(q);
-            setSelectedAnswer(null);
-            setTimeLeft(q.timeLimit);
-            setView('QUESTION');
-        });
-        const offResult = gameClient.on(MessageType.ANSWER_RESULT, () => {
-
+        const roster = (p: any) => setPlayers((p.players as RosterPlayer[]).map((x) => x.nickname));
+        const offJoined = gameClient.on(MessageType.PLAYER_JOINED, roster);
+        const offLeft = gameClient.on(MessageType.PLAYER_LEFT, roster);
+        const offQuestion = gameClient.on(MessageType.QUESTION, () => {
+            setStarting(false);
+            setPhase((prev) => (prev === 'LOBBY' ? 'RUNNING' : prev));
         });
         const offLeaderboard = gameClient.on(MessageType.LEADERBOARD, (p: any) => {
             setLeaderboard(p.leaderboard);
-            setView('LEADERBOARD');
+            if (p.state === 'FINISHED') setPhase('FINISHED');
+            else if (p.state && p.state !== 'LOBBY') setPhase((prev) => (prev === 'LOBBY' ? 'RUNNING' : prev));
         });
         const offFinished = gameClient.on(MessageType.GAME_FINISHED, (p: any) => {
             setLeaderboard(p.leaderboard);
-            setView('PODIUM');
+            setPhase('FINISHED');
         });
         const offClosed = gameClient.on(MessageType.ROOM_CLOSED, () => {
             gameClient.clearSession();
             setClosed(true);
         });
         return () => {
+            offJoined();
+            offLeft();
             offQuestion();
-            offResult();
             offLeaderboard();
             offFinished();
             offClosed();
@@ -69,65 +50,55 @@ const Game = () => {
 
     useEffect(() => {
         if (!gameClient.isOpen()) {
-            if (gameClient.session?.role === 'PLAYER') {
-                gameClient.resume().catch(() => navigate('/'));
+            if (gameClient.session?.role === 'HOST') {
+                gameClient.resume().catch(() => navigate('/dashboard'));
             } else {
-                navigate('/');
+                navigate('/dashboard');
             }
         }
 
     }, []);
 
     useEffect(() => {
-        if (view !== 'QUESTION' || timeLeft <= 0) return;
-        const id = setTimeout(() => setTimeLeft((t: number) => t - 1), 1000);
-        return () => clearTimeout(id);
-    }, [view, timeLeft]);
+        if (phase !== 'RUNNING') return;
+        gameClient.send(MessageType.REQ_GET_LEADERBOARD, {});
+        const id = setInterval(() => gameClient.send(MessageType.REQ_GET_LEADERBOARD, {}), 3000);
+        return () => clearInterval(id);
+    }, [phase]);
 
-    const handleAnswerClick = (index: number) => {
-        if (selectedAnswer !== null) {
-            setErrorMsg('Ви вже надіслали відповідь на це запитання!');
-            setTimeout(() => setErrorMsg(''), 3000);
-            return;
-        }
-        if (!question) return;
-        setSelectedAnswer(index);
-        gameClient.send(MessageType.REQ_SUBMIT_ANSWER, { answerId: question.answers[index].id });
+    const handleStart = () => {
+        if (players.length === 0) return;
+        setStarting(true);
+        gameClient.send(MessageType.REQ_START_QUIZ, {});
+    };
+
+    const leaveToDashboard = () => {
+        gameClient.clearSession();
+        navigate('/dashboard');
     };
 
     if (closed) {
         return (
             <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4 text-center">
                 <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full">
-                    <h2 className="text-3xl font-black text-gray-800 mb-4">Гру завершено</h2>
-                    <p className="text-gray-600 mb-8 font-medium">Адміністратор примусово завершив цю ігрову сесію.</p>
-                    <button onClick={() => navigate('/')} className="w-full bg-gray-100 text-gray-800 px-6 py-4 rounded-xl font-bold hover:bg-gray-200 transition-colors">
-                        Повернутися на головну
+                    <h2 className="text-3xl font-black text-gray-800 mb-4">Сесію завершено</h2>
+                    <p className="text-gray-600 mb-8 font-medium">Цю ігрову сесію було закрито.</p>
+                    <button onClick={() => navigate('/dashboard')} className="w-full bg-gray-100 text-gray-800 px-6 py-4 rounded-xl font-bold hover:bg-gray-200 transition-colors">
+                        До панелі керування
                     </button>
                 </div>
             </div>
         );
     }
 
-    if (!question) {
-        return (
-            <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4 text-white">
-                <h1 className="text-3xl font-bold mb-6">Очікуємо початку гри...</h1>
-                <button onClick={() => { gameClient.clearSession(); navigate('/'); }} className="bg-white/20 px-6 py-3 rounded-lg font-bold">
-                    На головну
-                </button>
-            </div>
-        );
-    }
-
-    if (view === 'PODIUM') {
+    if (phase === 'FINISHED') {
         return (
             <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4">
                 <h1 className="text-white text-5xl font-black mb-12 drop-shadow-lg text-center tracking-wide">
                     Переможці:
                 </h1>
                 <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl p-8 flex flex-col gap-4 mb-8">
-                    {leaderboard.map((player: BoardEntry, index: number) => (
+                    {leaderboard.map((player, index) => (
                         <div
                             key={index}
                             className={`flex items-center justify-between p-4 rounded-xl font-bold text-lg ${
@@ -145,32 +116,35 @@ const Game = () => {
                         </div>
                     ))}
                 </div>
-                <button onClick={() => { gameClient.clearSession(); navigate('/'); }} className="bg-white text-gray-800 px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-colors">
-                    На головну
+                <button onClick={leaveToDashboard} className="bg-white text-gray-800 px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-colors">
+                    До панелі керування
                 </button>
             </div>
         );
     }
 
-    if (view === 'LEADERBOARD') {
+    if (phase === 'RUNNING') {
         return (
-            <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4">
+            <div className="min-h-screen bg-blue-600 flex flex-col items-center p-8">
+                <div className="w-full max-w-3xl flex justify-between items-center mb-10">
+                    <h2 className="text-white text-3xl font-bold drop-shadow-md">PIN: {pin}</h2>
+                    <div className="bg-black/20 px-6 py-2 rounded-full text-white font-bold text-xl">
+                        Гравців: {players.length}
+                    </div>
+                </div>
+
+                <h1 className="text-white text-4xl font-bold mb-10 text-center drop-shadow-lg">Гра триває…</h1>
+
                 <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
                     <div className="bg-gray-900 text-white p-6 text-center">
-                        <h2 className="text-3xl font-bold">Таблиця лідерів</h2>
-                        <p className="text-gray-400 mt-2">Раунд завершено</p>
+                        <h2 className="text-2xl font-bold">Таблиця лідерів</h2>
                     </div>
-                    <div className="p-8 flex flex-col gap-4">
-                        {leaderboard.map((player: BoardEntry, index: number) => (
-                            <div
-                                key={index}
-                                className={`flex items-center justify-between p-4 rounded-xl font-bold text-lg ${
-                                    index === 0 ? 'bg-yellow-100 text-yellow-800 border-2 border-yellow-400' :
-                                        index === 1 ? 'bg-gray-100 text-gray-700 border-2 border-gray-300' :
-                                            index === 2 ? 'bg-orange-50 text-orange-800 border-2 border-orange-300' :
-                                                'bg-white text-gray-700 border border-gray-200'
-                                }`}
-                            >
+                    <div className="p-6 flex flex-col gap-3">
+                        {leaderboard.length === 0 && (
+                            <div className="text-center text-gray-400 font-medium py-4">Очікуємо перші відповіді…</div>
+                        )}
+                        {leaderboard.map((player, index) => (
+                            <div key={index} className="flex items-center justify-between p-4 rounded-xl font-bold text-lg bg-gray-50 text-gray-700 border border-gray-200">
                                 <div className="flex items-center gap-4">
                                     <span className="w-8 text-center">{index + 1}.</span>
                                     <span>@{player.nickname}</span>
@@ -184,103 +158,42 @@ const Game = () => {
         );
     }
 
-    const timedOut = timeLeft <= 0 && selectedAnswer === null;
-
     return (
-        <div className="min-h-screen bg-gray-100 flex flex-col relative">
-            <header className="bg-white shadow-sm p-4 flex justify-between items-center z-10">
-                <div className="text-xl md:text-2xl font-black text-blue-600 tracking-tighter">KMAhoot!</div>
-                <div className="text-gray-500 font-bold text-sm md:text-base">Запитання {question.index + 1}</div>
-                <div className="bg-gray-900 text-white px-4 py-1.5 rounded-full font-bold text-sm md:text-base">
-                    PIN: {question.pin}
+        <div className="min-h-screen bg-blue-600 flex flex-col items-center p-8 relative">
+            <div className="w-full flex justify-between items-center mb-8">
+                <button onClick={leaveToDashboard} className="text-white/80 hover:text-white font-bold transition-colors">
+                    ← Вийти
+                </button>
+                <div className="bg-black/20 px-6 py-2 rounded-full text-white font-bold text-xl">
+                    Гравців: {players.length}
                 </div>
-            </header>
+            </div>
 
-            {errorMsg && (
-                <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-xl shadow-xl font-bold z-50 animate-bounce text-sm">
-                    {errorMsg}
-                </div>
-            )}
+            <p className="text-white/80 font-bold uppercase tracking-widest mb-2">Приєднуйтесь за PIN-кодом</p>
+            <div className="bg-white px-10 py-5 rounded-2xl shadow-2xl mb-10">
+                <span className="text-6xl font-black text-gray-900 tracking-[0.2em]">{pin}</span>
+            </div>
 
-            <main className="flex-1 flex flex-col p-4 md:p-6 max-w-5xl mx-auto w-full gap-6">
-                <div className="flex-1 flex items-center justify-center relative bg-white rounded-2xl shadow-sm border border-gray-200 p-6 md:p-10">
-                    <div className={`absolute left-6 top-1/2 -translate-y-1/2 w-16 h-16 rounded-full flex items-center justify-center shadow-lg border-4 hidden md:flex transition-colors ${
-                        timedOut
-                            ? 'bg-red-600 border-red-300'
-                            : timeLeft <= 5
-                                ? 'bg-orange-500 border-orange-200'
-                                : 'bg-purple-600 border-purple-200'
-                    }`}>
-                        <span className="text-2xl font-black text-white">
-                            {timedOut ? '!' : timeLeft}
-                        </span>
-                    </div>
+            <button
+                onClick={handleStart}
+                disabled={players.length === 0 || starting}
+                className="bg-green-500 text-white text-2xl font-black px-12 py-4 rounded-xl shadow-lg hover:bg-green-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mb-12"
+            >
+                {starting ? 'Запуск…' : 'Розпочати гру'}
+            </button>
 
-                    <div className={`absolute top-4 left-4 text-white px-3 py-1 rounded-full font-bold text-sm md:hidden transition-colors ${
-                        timedOut ? 'bg-red-600' : timeLeft <= 5 ? 'bg-orange-500' : 'bg-purple-600'
-                    }`}>
-                        {timedOut ? 'Час вийшов!' : `Час: ${timeLeft}`}
-                    </div>
-
-                    <h1 className="text-xl md:text-3xl font-bold text-center text-gray-800 max-w-3xl leading-snug">
-                        {question.text}
-                    </h1>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-auto md:h-48">
-                    {question.answers.map((answer: { id: number; text: string }, index: number) => {
-                        const isSelected = selectedAnswer === index;
-                        const isOtherSelected = selectedAnswer !== null && selectedAnswer !== index;
-
-                        return (
-                            <button
-                                key={answer.id}
-                                onClick={() => handleAnswerClick(index)}
-                                disabled={selectedAnswer !== null}
-                                className={`
-                                    relative flex items-center p-4 rounded-xl border-b-[6px] transition-all duration-200
-                                    ${COLORS[index % COLORS.length]}
-                                    ${isSelected ? 'scale-[0.98] opacity-100 ring-4 ring-white shadow-inner' : ''}
-                                    ${isOtherSelected ? 'opacity-40 grayscale-[50%]' : 'hover:-translate-y-1 hover:shadow-lg'}
-                                `}
-                            >
-                                <div className="w-12 flex justify-center shrink-0">
-                                    {SHAPES[index % SHAPES.length]}
-                                </div>
-                                <span className="text-white text-lg md:text-2xl font-bold ml-4 text-left drop-shadow-sm leading-tight">
-                                    {answer.text}
-                                </span>
-
-                                {isSelected && (
-                                    <div className="absolute top-3 right-3 bg-black/30 rounded-full p-1.5">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-white">
-                                            <path fillRule="evenodd" d="M19.916 4.626a.75.75 0 01.208 1.04l-9 13.5a.75.75 0 01-1.154.114l-6-6a.75.75 0 011.06-1.06l5.353 5.353 8.493-12.739a.75.75 0 011.04-.208z" clipRule="evenodd" />
-                                        </svg>
-                                    </div>
-                                )}
-                            </button>
-                        );
-                    })}
-                </div>
-
-                {timedOut && (
-                    <div className="text-center mb-4 md:mb-0">
-                        <span className="bg-red-600 text-white px-5 py-2 rounded-full font-bold text-sm shadow-md">
-                            Час вийшов! Ви ще можете обрати відповідь.
-                        </span>
-                    </div>
+            <div className="flex flex-wrap justify-center gap-4 w-full max-w-4xl">
+                {players.length === 0 && (
+                    <p className="text-white/80 text-xl font-medium animate-pulse">Очікуємо гравців…</p>
                 )}
-
-                {selectedAnswer !== null && (
-                    <div className="text-center animate-pulse mb-4 md:mb-0">
-                        <span className="bg-gray-800 text-white px-5 py-2 rounded-full font-bold text-sm shadow-md">
-                            Відповідь прийнято. Очікуємо завершення часу...
-                        </span>
+                {players.map((player, index) => (
+                    <div key={index} className="bg-white/20 px-6 py-3 rounded-lg text-white text-2xl font-bold shadow-sm">
+                        {player}
                     </div>
-                )}
-            </main>
+                ))}
+            </div>
         </div>
     );
 };
 
-export default Game;
+export default HostView;

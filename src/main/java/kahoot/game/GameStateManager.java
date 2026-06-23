@@ -1,5 +1,8 @@
 package kahoot.game;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
@@ -45,6 +48,22 @@ public class GameStateManager {
 
     public boolean sessionExists(String pin) {
         return sessions.containsKey(pin);
+    }
+
+    public List<String> reapStale(long now, long finishedGraceMs, long idleTimeoutMs) {
+        List<String> abandoned = new ArrayList<>();
+        for (Map.Entry<String, GameSession> entry : sessions.entrySet()) {
+            GameSession session = entry.getValue();
+            if (session.getState() == GameState.FINISHED) {
+                if (now - session.getFinishedAt() >= finishedGraceMs) {
+                    sessions.remove(entry.getKey(), session);
+                }
+            } else if (now - session.getLastActivityAt() >= idleTimeoutMs
+                    && sessions.remove(entry.getKey(), session)) {
+                abandoned.add(entry.getKey());
+            }
+        }
+        return abandoned;
     }
 
     private String generatePin() {

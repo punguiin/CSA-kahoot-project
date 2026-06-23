@@ -17,7 +17,15 @@ import kahoot.protocol.MessageCipher;
 import kahoot.web.HttpApiServer;
 import kahoot.web.WebSocketServer;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
 public class Main {
+
+    private static final long REAP_INTERVAL_MS = TimeUnit.MINUTES.toMillis(1);
+    private static final long FINISHED_GRACE_MS = TimeUnit.MINUTES.toMillis(5);
+    private static final long IDLE_TIMEOUT_MS = TimeUnit.HOURS.toMillis(1);
 
     public static void main(String[] args) throws Exception {
         int tcpPort = port("TCP_PORT", 9090);
@@ -47,11 +55,28 @@ public class Main {
         HttpApiServer httpServer = new HttpApiServer(
                 httpPort, quizDao, userDao, historyDao, gameStateManager, wsDispatcher::endRoom);
 
+        ScheduledExecutorService reaper = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "session-reaper");
+            t.setDaemon(true);
+            return t;
+        });
+        reaper.scheduleAtFixedRate(() -> {
+            try {
+                long now = System.currentTimeMillis();
+                for (String pin : gameStateManager.reapStale(now, FINISHED_GRACE_MS, IDLE_TIMEOUT_MS)) {
+                    wsDispatcher.notifyClosed(pin);
+                }
+            } catch (RuntimeException e) {
+                System.err.println("session-reaper: " + e.getMessage());
+            }
+        }, REAP_INTERVAL_MS, REAP_INTERVAL_MS, TimeUnit.MILLISECONDS);
+
         tcpServer.start();
         wsServer.start();
         httpServer.start();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Main: shutting down");
+            reaper.shutdownNow();
             tcpServer.stop();
             wsServer.stop();
             httpServer.stop();

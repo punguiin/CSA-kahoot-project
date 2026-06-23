@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class GameSession {
 
+    public static final int NO_ANSWER = -1;
+
     private final String pin;
     private final int quizId;
 
@@ -19,6 +21,10 @@ public class GameSession {
     private volatile Quiz quiz;
     private volatile int currentQuestionIndex;
     private volatile long questionStartedAt;
+
+    private final long createdAt;
+    private volatile long lastActivityAt;
+    private volatile long finishedAt;
 
     private final CopyOnWriteArrayList<Player> players;
     private final AtomicInteger answeredCount = new AtomicInteger(0);
@@ -29,6 +35,9 @@ public class GameSession {
         this.state = GameState.LOBBY;
         this.players = new CopyOnWriteArrayList<>();
         this.currentQuestionIndex = -1;
+        long now = System.currentTimeMillis();
+        this.createdAt = now;
+        this.lastActivityAt = now;
     }
 
     public synchronized boolean addPlayer(String nickname) {
@@ -41,6 +50,7 @@ public class GameSession {
             return false;
         }
         players.add(new Player(nickname));
+        touch();
         return true;
     }
 
@@ -71,6 +81,7 @@ public class GameSession {
     public synchronized void endRound() {
         requireState(GameState.QUESTION);
         this.state = GameState.LEADERBOARD;
+        touch();
     }
 
     public synchronized void nextQuestion(boolean hasMoreQuestions) {
@@ -79,7 +90,7 @@ public class GameSession {
             this.currentQuestionIndex++;
             beginQuestion();
         } else {
-            this.state = GameState.FINISHED;
+            markFinished();
         }
     }
 
@@ -89,7 +100,7 @@ public class GameSession {
             this.currentQuestionIndex++;
             beginQuestion();
         } else {
-            this.state = GameState.FINISHED;
+            markFinished();
         }
     }
 
@@ -97,6 +108,18 @@ public class GameSession {
         this.state = GameState.QUESTION;
         this.questionStartedAt = System.currentTimeMillis();
         this.answeredCount.set(0);
+        touch();
+    }
+
+    private void touch() {
+        this.lastActivityAt = System.currentTimeMillis();
+    }
+
+    private void markFinished() {
+        this.state = GameState.FINISHED;
+        long now = System.currentTimeMillis();
+        this.finishedAt = now;
+        this.lastActivityAt = now;
     }
 
     private boolean hasMoreQuestions() {
@@ -147,6 +170,7 @@ public class GameSession {
             player.get().addScore(points);
         }
 
+        touch();
         return AnswerResult.accepted(correct, points);
     }
 
@@ -163,6 +187,7 @@ public class GameSession {
             p.setProgressIndex(0);
             p.setQuestionStartedAt(now);
         }
+        touch();
     }
 
     public int questionCount() {
@@ -189,23 +214,31 @@ public class GameSession {
         if (question.isEmpty()) {
             return AnswerResult.rejected("You have finished the quiz");
         }
-        Optional<Answer> selected = question.get().getAnswers().stream()
-                .filter(a -> a.getId() != null && a.getId() == answerId)
-                .findFirst();
-        if (selected.isEmpty()) {
-            return AnswerResult.rejected("Unknown answer id: " + answerId);
-        }
 
         long answeredAt = System.currentTimeMillis();
-        boolean correct = selected.get().isCorrect();
-        int points = ScoringEngine.calculatePoints(
-                correct, p.getQuestionStartedAt(), answeredAt, question.get().getTimeLimit());
-        if (points > 0) {
-            p.addScore(points);
+        long timeLimitMillis = question.get().getTimeLimit() * 1000L;
+        boolean expired = timeLimitMillis > 0 && answeredAt - p.getQuestionStartedAt() > timeLimitMillis;
+
+        boolean correct = false;
+        int points = 0;
+        if (!expired && answerId != NO_ANSWER) {
+            Optional<Answer> selected = question.get().getAnswers().stream()
+                    .filter(a -> a.getId() != null && a.getId() == answerId)
+                    .findFirst();
+            if (selected.isEmpty()) {
+                return AnswerResult.rejected("Unknown answer id: " + answerId);
+            }
+            correct = selected.get().isCorrect();
+            points = ScoringEngine.calculatePoints(
+                    correct, p.getQuestionStartedAt(), answeredAt, question.get().getTimeLimit());
+            if (points > 0) {
+                p.addScore(points);
+            }
         }
 
         p.setProgressIndex(p.getProgressIndex() + 1);
         p.setQuestionStartedAt(answeredAt);
+        touch();
         return AnswerResult.accepted(correct, points);
     }
 
@@ -229,7 +262,7 @@ public class GameSession {
         if (!allDone) {
             return false;
         }
-        this.state = GameState.FINISHED;
+        markFinished();
         return true;
     }
 
@@ -253,6 +286,18 @@ public class GameSession {
 
     public int getCurrentQuestionIndex() {
         return currentQuestionIndex;
+    }
+
+    public long getCreatedAt() {
+        return createdAt;
+    }
+
+    public long getLastActivityAt() {
+        return lastActivityAt;
+    }
+
+    public long getFinishedAt() {
+        return finishedAt;
     }
 
     private void requireState(GameState expected) {

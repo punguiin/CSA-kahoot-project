@@ -24,6 +24,20 @@ interface ApiSession {
     state: string;
 }
 
+interface SessionPlayer {
+    nickname: string;
+    score: number;
+    progress: number;
+}
+
+interface SessionDetail {
+    pin: string;
+    quizTitle: string;
+    state: string;
+    questionCount: number;
+    players: SessionPlayer[];
+}
+
 interface HistoryEntry {
     quizTitle: string;
     playedAt: string;
@@ -43,6 +57,9 @@ const Dashboard = () => {
     const [sessions, setSessions] = useState<ApiSession[]>([]);
     const [history, setHistory] = useState<HistoryEntry[]>([]);
     const [error, setError] = useState('');
+    const [detailPin, setDetailPin] = useState<string | null>(null);
+    const [detail, setDetail] = useState<SessionDetail | null>(null);
+    const [copiedPin, setCopiedPin] = useState('');
 
     const fetchQuizzes = () => api.quizzes().then(setQuizzes).catch((e) => setError(e.message));
     const fetchUsers = () => api.users().then(setUsers).catch((e) => setError(e.message));
@@ -72,6 +89,17 @@ const Dashboard = () => {
         return () => clearInterval(id);
 
     }, [activeTab, role]);
+
+    useEffect(() => {
+        if (!detailPin) return;
+        const load = () => api.sessionDetails(detailPin)
+            .then(setDetail)
+            .catch((e) => { setError(e.message); setDetailPin(null); });
+        load();
+        const id = setInterval(load, 2000);
+        return () => clearInterval(id);
+
+    }, [detailPin]);
 
     useEffect(() => {
         if (!user) return;
@@ -135,9 +163,25 @@ const Dashboard = () => {
     const handleEndSession = async (pin: string) => {
         try {
             await api.endSession(pin);
+            if (detailPin === pin) closeDetails();
             fetchSessions();
         } catch (err: any) {
             setError(err.message);
+        }
+    };
+
+    const closeDetails = () => {
+        setDetailPin(null);
+        setDetail(null);
+    };
+
+    const handleCopyPin = async (pin: string) => {
+        try {
+            await navigator.clipboard.writeText(pin);
+            setCopiedPin(pin);
+            setTimeout(() => setCopiedPin(''), 1500);
+        } catch {
+            setError('Не вдалося скопіювати PIN');
         }
     };
 
@@ -285,8 +329,12 @@ const Dashboard = () => {
                                         <td className="p-4 text-gray-700 font-medium">{s.quizTitle}</td>
                                         <td className="p-4 text-gray-700 font-medium">{s.players}</td>
                                         <td className="p-4 text-gray-500 font-medium">{s.state}</td>
-                                        <td className="p-4 text-right">
-                                            <button onClick={() => handleEndSession(s.pin)} className="bg-red-100 text-red-700 px-4 py-2 rounded-md font-bold text-sm hover:bg-red-600 hover:text-white transition-colors">Завершити примусово</button>
+                                        <td className="p-4">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button onClick={() => setDetailPin(s.pin)} className="bg-blue-100 text-blue-700 px-3 py-2 rounded-md font-bold text-sm hover:bg-blue-600 hover:text-white transition-colors">Деталі</button>
+                                                <button onClick={() => handleCopyPin(s.pin)} className="bg-gray-100 text-gray-700 px-3 py-2 rounded-md font-bold text-sm hover:bg-gray-200 transition-colors w-32">{copiedPin === s.pin ? 'Скопійовано!' : 'Копіювати PIN'}</button>
+                                                <button onClick={() => handleEndSession(s.pin)} className="bg-red-100 text-red-700 px-3 py-2 rounded-md font-bold text-sm hover:bg-red-600 hover:text-white transition-colors">Завершити</button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -328,6 +376,52 @@ const Dashboard = () => {
                     )}
                 </div>
             </main>
+
+            {detailPin && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={closeDetails}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                        <div className="bg-gray-900 text-white p-5 flex justify-between items-start">
+                            <div>
+                                <h3 className="text-xl font-bold">{detail?.quizTitle || 'Сесія'}</h3>
+                                <p className="text-gray-400 text-sm font-medium mt-1">
+                                    PIN: {detailPin} • Стан: {detail?.state ?? '…'}
+                                </p>
+                            </div>
+                            <button onClick={closeDetails} className="text-gray-400 hover:text-white text-2xl leading-none font-bold">×</button>
+                        </div>
+                        <div className="p-5 overflow-y-auto">
+                            {!detail ? (
+                                <div className="text-center text-gray-400 font-medium py-8">Завантаження…</div>
+                            ) : detail.players.length === 0 ? (
+                                <div className="text-center text-gray-400 font-medium py-8">Гравців ще немає</div>
+                            ) : (
+                                <div className="flex flex-col gap-2">
+                                    {detail.players.map((p, i) => (
+                                        <div key={p.nickname} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-100">
+                                            <div className="flex items-center gap-3 font-bold text-gray-800">
+                                                <span className="w-6 text-center text-gray-400">{i + 1}.</span>
+                                                <span>@{p.nickname}</span>
+                                            </div>
+                                            <div className="flex items-center gap-4 text-sm font-medium">
+                                                <span className="text-gray-500">{Math.min(p.progress, detail.questionCount)}/{detail.questionCount} питань</span>
+                                                <span className="text-blue-600 font-bold w-16 text-right">{p.score}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t flex justify-end gap-2">
+                            <button onClick={() => handleCopyPin(detailPin)} className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md font-bold text-sm hover:bg-gray-200 transition-colors">
+                                {copiedPin === detailPin ? 'Скопійовано!' : 'Копіювати PIN'}
+                            </button>
+                            <button onClick={() => handleEndSession(detailPin)} className="bg-red-100 text-red-700 px-4 py-2 rounded-md font-bold text-sm hover:bg-red-600 hover:text-white transition-colors">
+                                Завершити сесію
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

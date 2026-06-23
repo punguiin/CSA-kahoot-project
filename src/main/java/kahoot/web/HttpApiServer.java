@@ -7,7 +7,9 @@ import kahoot.db.GameHistoryDAO;
 import kahoot.db.QuizDAO;
 import kahoot.db.UserDAO;
 import kahoot.game.GameSession;
+import kahoot.game.GameState;
 import kahoot.game.GameStateManager;
+import kahoot.game.Player;
 import kahoot.model.Answer;
 import kahoot.model.Question;
 import kahoot.model.Quiz;
@@ -149,6 +151,9 @@ public final class HttpApiServer {
         if (ex.getRequestMethod().equals("GET") && seg.length == 2) {
             List<String> items = new ArrayList<>();
             for (GameSession s : gameStateManager.all()) {
+                if (s.getState() == GameState.FINISHED) {
+                    continue;
+                }
                 String title = quizDAO.findById(s.getQuizId()).map(Quiz::getTitle).orElse("—");
                 items.add(Json.Writer.object()
                         .str("pin", s.getPin())
@@ -158,8 +163,31 @@ public final class HttpApiServer {
                         .end());
             }
             send(ex, 200, Json.array(items));
+        } else if (ex.getRequestMethod().equals("GET") && seg.length == 3) {
+            GameSession s = gameStateManager.getSession(seg[2]).orElse(null);
+            if (s == null) {
+                send(ex, 404, PayloadCodec.error("Session not found"));
+                return;
+            }
+            String title = quizDAO.findById(s.getQuizId()).map(Quiz::getTitle).orElse("—");
+            List<String> players = new ArrayList<>();
+            for (Player p : s.getLeaderboard()) {
+                players.add(Json.Writer.object()
+                        .str("nickname", p.getNickname())
+                        .num("score", p.getScore())
+                        .num("progress", p.getProgressIndex())
+                        .end());
+            }
+            send(ex, 200, Json.Writer.object()
+                    .str("pin", s.getPin())
+                    .str("quizTitle", title)
+                    .str("state", s.getState().name())
+                    .num("questionCount", s.questionCount())
+                    .raw("players", Json.array(players))
+                    .end());
         } else if (ex.getRequestMethod().equals("POST") && seg.length == 4 && seg[3].equals("end")) {
             endRoom.accept(seg[2]);
+            gameStateManager.removeSession(seg[2]);
             send(ex, 200, "{\"ended\":true}");
         } else {
             send(ex, 405, PayloadCodec.error("Unsupported"));

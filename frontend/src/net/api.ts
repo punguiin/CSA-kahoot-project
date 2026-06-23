@@ -65,5 +65,6 @@ export const api = {
         request<unknown>('POST', `/users/${id}/status`, { status }),
 
     sessions: () => request<any[]>('GET', '/sessions'),
+    sessionDetails: (pin: string) => request<any>('GET', `/sessions/${pin}`),
     endSession: (pin: string) => request<unknown>('POST', `/sessions/${pin}/end`),
 };

@@ -23,8 +23,8 @@ import java.util.concurrent.TimeUnit;
 
 public class Main {
 
-    private static final long REAP_INTERVAL_MS = TimeUnit.MINUTES.toMillis(1);
-    private static final long FINISHED_GRACE_MS = TimeUnit.MINUTES.toMillis(5);
+    private static final long REAP_INTERVAL_MS = TimeUnit.SECONDS.toMillis(30);
+    private static final long FINISHED_GRACE_MS = TimeUnit.MINUTES.toMillis(1);
     private static final long IDLE_TIMEOUT_MS = TimeUnit.HOURS.toMillis(1);
 
     public static void main(String[] args) throws Exception {

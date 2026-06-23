@@ -8,6 +8,7 @@ import kahoot.db.QuizDAOImpl;
 import kahoot.db.UserDAO;
 import kahoot.db.UserDAOImpl;
 import kahoot.game.GameSession;
+import kahoot.game.GameState;
 import kahoot.game.GameStateManager;
 import kahoot.model.Answer;
 import kahoot.model.Question;
@@ -181,5 +182,49 @@ class HttpApiServerTest {
 
         assertThat(send("POST", "/sessions/" + session.getPin() + "/end", null).statusCode()).isEqualTo(200);
         assertThat(endedRooms).containsExactly(session.getPin());
+    }
+
+    @Test
+    void finishedSessionsAreHiddenFromActiveList() throws Exception {
+        GameSession active = gsm.createSession(1);
+        GameSession finished = finishedSession();
+
+        String body = send("GET", "/sessions", null).body();
+
+        assertThat(body).contains(active.getPin());
+        assertThat(body).doesNotContain(finished.getPin());
+    }
+
+    @Test
+    void sessionDetailsReturnPlayersAndScores() throws Exception {
+        GameSession s = gsm.createSession(1);
+        s.setQuiz(quizDAO.findById(1).orElseThrow());
+        s.addPlayer("alice");
+        s.startSelfPaced();
+
+        HttpResponse<String> r = send("GET", "/sessions/" + s.getPin(), null);
+
+        assertThat(r.statusCode()).isEqualTo(200);
+        assertThat(r.body())
+                .contains("\"quizTitle\":\"Networks\"")
+                .contains("\"nickname\":\"alice\"")
+                .contains("\"questionCount\":2");
+    }
+
+    @Test
+    void sessionDetailsReturn404ForUnknownPin() throws Exception {
+        assertThat(send("GET", "/sessions/000000", null).statusCode()).isEqualTo(404);
+    }
+
+    private GameSession finishedSession() {
+        GameSession s = gsm.createSession(1);
+        s.setQuiz(quizDAO.findById(1).orElseThrow());
+        s.addPlayer("alice");
+        s.startSelfPaced();
+        s.submitSelfPaced("alice", GameSession.NO_ANSWER);
+        s.submitSelfPaced("alice", GameSession.NO_ANSWER);
+        s.markFinishedOnce();
+        assertThat(s.getState()).isEqualTo(GameState.FINISHED);
+        return s;
     }
 }

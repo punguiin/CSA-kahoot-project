@@ -3,6 +3,7 @@ package kahoot.net;
 import kahoot.game.GameAction;
 import kahoot.game.GameResult;
 import kahoot.game.GameService;
+import kahoot.game.GameSession;
 import kahoot.game.GameState;
 import kahoot.game.GameStateManager;
 import kahoot.game.Player;
@@ -56,6 +57,11 @@ public final class SessionDispatcher {
             return;
         }
 
+        if (type == MessageType.REQ_REJOIN) {
+            handleRejoin(connId, reqPktId, json);
+            return;
+        }
+
         Identity identity = registry.identityOf(connId);
         if (requiresBinding(type) && identity == null) {
             sendError(connId, reqPktId, "You have not joined a room");
@@ -76,7 +82,12 @@ public final class SessionDispatcher {
             return;
         }
 
-        GameResult result = gameService.executeAction(action);
+        GameResult result = switch (type) {
+            case REQ_START_QUIZ -> gameService.startGame(identity.pin());
+            case REQ_SUBMIT_ANSWER -> gameService.submitAndAdvance(
+                    identity.pin(), identity.nickname(), action.getAnswerId());
+            default -> gameService.executeAction(action);
+        };
         if (!result.isSuccess()) {
             sendError(connId, reqPktId, result.getMessage());
             return;
@@ -102,8 +113,21 @@ public final class SessionDispatcher {
                         PayloadCodec.playerJoined(pin, roster(pin), nick));
             }
             case REQ_START_QUIZ -> pushQuestion(action.getPin(), result);
-            case REQ_SUBMIT_ANSWER -> reply(connId, reqPktId, MessageType.ANSWER_RESULT,
-                    PayloadCodec.answerResult(result.getAnswerResult()));
+            case REQ_SUBMIT_ANSWER -> {
+                reply(connId, reqPktId, MessageType.ANSWER_RESULT,
+                        PayloadCodec.answerResult(result.getAnswerResult()));
+
+                if (result.getState() == GameState.FINISHED) {
+                    sendTo(connId, MessageType.GAME_FINISHED,
+                            PayloadCodec.leaderboard(action.getPin(), GameState.FINISHED, result.getLeaderboard()));
+                } else if (result.getCurrentQuestion() != null) {
+                    int index = gameStateManager.getSession(action.getPin())
+                            .map(s -> s.progressOf(action.getNickname()))
+                            .orElse(0);
+                    sendTo(connId, MessageType.QUESTION,
+                            PayloadCodec.question(action.getPin(), index, result.getCurrentQuestion()));
+                }
+            }
             case REQ_NEXT_QUESTION -> {
                 String pin = action.getPin();
                 if (result.getState() == GameState.FINISHED) {
@@ -122,6 +146,66 @@ public final class SessionDispatcher {
                     PayloadCodec.leaderboard(action.getPin(), result.getState(), result.getLeaderboard()));
             default -> sendError(connId, reqPktId, "Unhandled request: " + type);
         }
+    }
+
+    private void handleRejoin(int connId, long reqPktId, Map<String, Object> json) {
+        Object pinObj = json.get("pin");
+        if (!(pinObj instanceof String pin)) {
+            sendError(connId, reqPktId, "Missing pin");
+            return;
+        }
+        GameSession session = gameStateManager.getSession(pin).orElse(null);
+        if (session == null) {
+            sendError(connId, reqPktId, "Room not found: " + pin);
+            return;
+        }
+
+        Object nickObj = json.get("nickname");
+        if (nickObj instanceof String nickname && !nickname.isBlank()) {
+            boolean known = session.getPlayers().stream()
+                    .anyMatch(p -> p.getNickname().equalsIgnoreCase(nickname));
+            if (!known) {
+                sendError(connId, reqPktId, "No active player '" + nickname + "' to rejoin");
+                return;
+            }
+            registry.bindPlayer(connId, pin, nickname);
+            reply(connId, reqPktId, MessageType.JOIN_ACCEPTED,
+                    PayloadCodec.joinAccepted(pin, nickname, session.getState()));
+            replayPlayerState(connId, session, nickname);
+        } else {
+            registry.bindHost(connId, pin);
+            reply(connId, reqPktId, MessageType.ROOM_CREATED, PayloadCodec.roomCreated(pin));
+            replayHostState(connId, session);
+        }
+    }
+
+    private void replayPlayerState(int connId, GameSession session, String nickname) {
+        String pin = session.getPin();
+        if (session.getState() == GameState.LOBBY) {
+            sendTo(connId, MessageType.PLAYER_JOINED, PayloadCodec.playerJoined(pin, session.getPlayers(), ""));
+        } else if (session.isPlayerDone(nickname)) {
+            sendTo(connId, MessageType.GAME_FINISHED,
+                    PayloadCodec.leaderboard(pin, GameState.FINISHED, session.getLeaderboard()));
+        } else {
+            session.currentQuestionForPlayer(nickname).ifPresent(q -> sendTo(connId, MessageType.QUESTION,
+                    PayloadCodec.question(pin, session.progressOf(nickname), q)));
+        }
+    }
+
+    private void replayHostState(int connId, GameSession session) {
+        String pin = session.getPin();
+        if (session.getState() == GameState.LOBBY) {
+            sendTo(connId, MessageType.PLAYER_JOINED, PayloadCodec.playerJoined(pin, session.getPlayers(), ""));
+        } else {
+            sendTo(connId, MessageType.LEADERBOARD,
+                    PayloadCodec.leaderboard(pin, session.getState(), session.getLeaderboard()));
+        }
+    }
+
+    public void endRoom(String pin) {
+        broadcast(pin, MessageType.ROOM_CLOSED,
+                PayloadCodec.error("Сесію завершено адміністратором"));
+        gameStateManager.removeSession(pin);
     }
 
     public void onDisconnect(int connId) {
@@ -153,6 +237,10 @@ public final class SessionDispatcher {
 
     private void broadcast(String pin, MessageType type, String json) {
         registry.broadcast(pin, build(type, 0, eventPktId.incrementAndGet(), json), -1);
+    }
+
+    private void sendTo(int connId, MessageType type, String json) {
+        registry.sendTo(connId, build(type, connId, eventPktId.incrementAndGet(), json));
     }
 
     private void sendError(int connId, long pktId, String message) {

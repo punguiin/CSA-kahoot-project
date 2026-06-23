@@ -9,6 +9,7 @@ public enum MessageType {
     REQ_NEXT_QUESTION(5),
     REQ_END_ROUND(6),
     REQ_GET_LEADERBOARD(7),
+    REQ_REJOIN(8),
 
     ROOM_CREATED(20),
     JOIN_ACCEPTED(21),
@@ -19,7 +20,8 @@ public enum MessageType {
     QUESTION(41),
     LEADERBOARD(42),
     GAME_FINISHED(43),
-    PLAYER_LEFT(44);
+    PLAYER_LEFT(44),
+    ROOM_CLOSED(45);
 
     private final int code;
 

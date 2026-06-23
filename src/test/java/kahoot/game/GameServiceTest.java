@@ -187,4 +187,42 @@ class GameServiceTest {
             doneLatch.countDown();
         }
     }
+
+    @Test
+    void selfPacedPlayerAdvancesQuestionByQuestionThenFinishes() {
+        int twoQuizId = quizDAO.insert(twoQuestionQuiz());
+        String pin = sut.executeAction(GameAction.createRoom(twoQuizId)).getPin();
+        sut.executeAction(GameAction.joinRoom(pin, "alice"));
+        sut.startGame(pin);
+
+        Quiz quiz = quizDAO.findById(twoQuizId).get();
+        int firstCorrect = correctAnswerId(quiz, 0);
+        int secondCorrect = correctAnswerId(quiz, 1);
+
+        GameResult afterFirst = sut.submitAndAdvance(pin, "alice", firstCorrect);
+        assertThat(afterFirst.getState()).isEqualTo(GameState.QUESTION);
+        assertThat(afterFirst.getAnswerResult().isCorrect()).isTrue();
+        assertThat(afterFirst.getCurrentQuestion()).isNotNull();
+
+        GameResult afterSecond = sut.submitAndAdvance(pin, "alice", secondCorrect);
+        assertThat(afterSecond.getState()).isEqualTo(GameState.FINISHED);
+        assertThat(afterSecond.getCurrentQuestion()).isNull();
+        assertThat(afterSecond.getLeaderboard()).isNotEmpty();
+        assertThat(gameHistoryDAO.countByQuizId(twoQuizId)).isEqualTo(1);
+    }
+
+    private int correctAnswerId(Quiz quiz, int questionIndex) {
+        return quiz.getQuestions().get(questionIndex).getAnswers().stream()
+                .filter(Answer::isCorrect).findFirst().get().getId();
+    }
+
+    private Quiz twoQuestionQuiz() {
+        Question q1 = new Question(0, "1 + 1 = ?", 10);
+        q1.setAnswers(List.of(new Answer(0, "2", true), new Answer(0, "3", false)));
+        Question q2 = new Question(0, "2 + 2 = ?", 10);
+        q2.setAnswers(List.of(new Answer(0, "4", true), new Answer(0, "5", false)));
+        Quiz quiz = new Quiz("Math", "Two questions", 1);
+        quiz.setQuestions(List.of(q1, q2));
+        return quiz;
+    }
 }

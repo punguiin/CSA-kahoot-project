@@ -158,7 +158,7 @@ class SessionDispatcherTest {
     }
 
     @Test
-    void submitAnswerRepliesOnlyToTheAnsweringPlayer() {
+    void submitAnswerAdvancesOnlyTheAnsweringPlayer() {
         String pin = createRoomAndJoinEveryone();
         request(1, MessageType.REQ_START_QUIZ, "{}");
         int hostBefore = host.received.size();
@@ -166,8 +166,11 @@ class SessionDispatcherTest {
 
         request(2, MessageType.REQ_SUBMIT_ANSWER, "{\"answerId\":" + correctAnswerId + "}");
 
-        assertThat(alice.last().getMessage().getCType()).isEqualTo(MessageType.ANSWER_RESULT.code());
-        assertThat(payloadOf(alice.last()).get("correct")).isEqualTo(true);
+        Packet answerResult = alice.received.stream()
+                .filter(p -> p.getMessage().getCType() == MessageType.ANSWER_RESULT.code())
+                .findFirst().orElseThrow();
+        assertThat(payloadOf(answerResult).get("correct")).isEqualTo(true);
+        assertThat(alice.last().getMessage().getCType()).isEqualTo(MessageType.GAME_FINISHED.code());
 
         assertThat(host.received).hasSize(hostBefore);
         assertThat(bob.received).hasSize(bobBefore);
@@ -216,5 +219,38 @@ class SessionDispatcherTest {
         assertThat(host.received).hasSizeGreaterThan(hostBefore);
         assertThat(host.last().getMessage().getCType()).isEqualTo(MessageType.PLAYER_LEFT.code());
         assertThat(payloadOf(host.last()).get("left")).isEqualTo("alice");
+    }
+
+    @Test
+    void playerRejoinOnNewConnectionReplaysCurrentQuestion() {
+        String pin = createRoomAndJoinEveryone();
+        request(1, MessageType.REQ_START_QUIZ, "{}");
+
+        RecordingSink reconnected = register(4);
+        request(4, MessageType.REQ_REJOIN, "{\"pin\":\"" + pin + "\",\"nickname\":\"alice\"}");
+
+        assertThat(reconnected.types()).containsExactly(MessageType.JOIN_ACCEPTED, MessageType.QUESTION);
+        assertThat(new String(reconnected.last().getMessage().getPayload())).doesNotContain("isCorrect");
+    }
+
+    @Test
+    void hostRejoinOnNewConnectionReplaysLeaderboard() {
+        String pin = createRoomAndJoinEveryone();
+        request(1, MessageType.REQ_START_QUIZ, "{}");
+
+        RecordingSink reconnectedHost = register(5);
+        request(5, MessageType.REQ_REJOIN, "{\"pin\":\"" + pin + "\"}");
+
+        assertThat(reconnectedHost.types()).containsExactly(MessageType.ROOM_CREATED, MessageType.LEADERBOARD);
+    }
+
+    @Test
+    void rejoinUnknownPlayerIsRejected() {
+        String pin = createRoomAndJoinEveryone();
+
+        RecordingSink stranger = register(6);
+        request(6, MessageType.REQ_REJOIN, "{\"pin\":\"" + pin + "\",\"nickname\":\"nobody\"}");
+
+        assertThat(stranger.types()).containsExactly(MessageType.ERROR);
     }
 }

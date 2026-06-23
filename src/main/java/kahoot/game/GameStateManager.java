@@ -23,6 +23,10 @@ public class GameStateManager {
         return Optional.ofNullable(sessions.get(pin));
     }
 
+    public java.util.List<GameSession> all() {
+        return new java.util.ArrayList<>(sessions.values());
+    }
+
     public boolean joinSession(String pin, String nickname) {
         GameSession session = sessions.get(pin);
         if (session == null) {

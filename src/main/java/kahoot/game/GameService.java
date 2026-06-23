@@ -130,6 +130,42 @@ public class GameService {
         return GameResult.leaderboard(action.getPin(), session.get().getState(), session.get().getLeaderboard());
     }
 
+    public GameResult startGame(String pin) {
+        Optional<GameSession> session = gameStateManager.getSession(pin);
+        if (session.isEmpty()) {
+            return GameResult.error("Room not found: " + pin);
+        }
+        try {
+            session.get().startSelfPaced();
+        } catch (IllegalStateException e) {
+            return GameResult.error(e.getMessage());
+        }
+        return GameResult.questionStarted(pin, session.get().getState(),
+                session.get().questionAt(0).orElse(null));
+    }
+
+    public GameResult submitAndAdvance(String pin, String nickname, int answerId) {
+        Optional<GameSession> session = gameStateManager.getSession(pin);
+        if (session.isEmpty()) {
+            return GameResult.error("Room not found: " + pin);
+        }
+        GameSession gameSession = session.get();
+        AnswerResult result = gameSession.submitSelfPaced(nickname, answerId);
+        if (!result.isAccepted()) {
+            return GameResult.answerSubmitted(pin, result);
+        }
+
+        Optional<Question> next = gameSession.currentQuestionForPlayer(nickname);
+        if (next.isPresent()) {
+            return GameResult.selfPacedNext(pin, result, next.get());
+        }
+
+        if (gameSession.markFinishedOnce()) {
+            recordGameHistory(gameSession);
+        }
+        return GameResult.selfPacedFinished(pin, result, gameSession.getLeaderboard());
+    }
+
     private void recordGameHistory(GameSession session) {
         List<Player> leaderboard = session.getLeaderboard();
         String winner = leaderboard.isEmpty() ? null : leaderboard.get(0).getNickname();

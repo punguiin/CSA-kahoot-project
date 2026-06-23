@@ -7,9 +7,13 @@ public class Player {
     private final String nickname;
     private volatile int score;
 
+    private volatile int progressIndex;
+    private volatile long questionStartedAt;
+
     public Player(String nickname) {
         this.nickname = Objects.requireNonNull(nickname, "nickname must not be null");
         this.score = 0;
+        this.progressIndex = 0;
     }
 
     public String getNickname() {
@@ -24,6 +28,22 @@ public class Player {
         if (points > 0) {
             this.score += points;
         }
+    }
+
+    public int getProgressIndex() {
+        return progressIndex;
+    }
+
+    public void setProgressIndex(int progressIndex) {
+        this.progressIndex = progressIndex;
+    }
+
+    public long getQuestionStartedAt() {
+        return questionStartedAt;
+    }
+
+    public void setQuestionStartedAt(long questionStartedAt) {
+        this.questionStartedAt = questionStartedAt;
     }
 
     @Override

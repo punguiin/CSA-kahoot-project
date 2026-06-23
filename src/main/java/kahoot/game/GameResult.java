@@ -49,6 +49,14 @@ public class GameResult {
         return new GameResult(true, "Leaderboard", pin, state, null, null, leaderboard);
     }
 
+    public static GameResult selfPacedNext(String pin, AnswerResult answerResult, Question nextQuestion) {
+        return new GameResult(true, "Next question", pin, GameState.QUESTION, nextQuestion, answerResult, null);
+    }
+
+    public static GameResult selfPacedFinished(String pin, AnswerResult answerResult, List<Player> leaderboard) {
+        return new GameResult(true, "Finished", pin, GameState.FINISHED, null, answerResult, leaderboard);
+    }
+
     public boolean isSuccess() {
         return success;
     }

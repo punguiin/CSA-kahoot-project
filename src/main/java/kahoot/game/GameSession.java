@@ -154,6 +154,85 @@ public class GameSession {
         return answeredCount.get();
     }
 
+    public synchronized void startSelfPaced() {
+        requireState(GameState.LOBBY);
+        this.currentQuestionIndex = 0;
+        this.state = GameState.QUESTION;
+        long now = System.currentTimeMillis();
+        for (Player p : players) {
+            p.setProgressIndex(0);
+            p.setQuestionStartedAt(now);
+        }
+    }
+
+    public int questionCount() {
+        return quiz == null ? 0 : quiz.getQuestions().size();
+    }
+
+    public Optional<Question> questionAt(int index) {
+        if (quiz == null || index < 0 || index >= quiz.getQuestions().size()) {
+            return Optional.empty();
+        }
+        return Optional.of(quiz.getQuestions().get(index));
+    }
+
+    public synchronized AnswerResult submitSelfPaced(String playerNickname, int answerId) {
+        if (state != GameState.QUESTION) {
+            return AnswerResult.rejected("Game is not running");
+        }
+        Optional<Player> player = findPlayer(playerNickname);
+        if (player.isEmpty()) {
+            return AnswerResult.rejected("Unknown player: " + playerNickname);
+        }
+        Player p = player.get();
+        Optional<Question> question = questionAt(p.getProgressIndex());
+        if (question.isEmpty()) {
+            return AnswerResult.rejected("You have finished the quiz");
+        }
+        Optional<Answer> selected = question.get().getAnswers().stream()
+                .filter(a -> a.getId() != null && a.getId() == answerId)
+                .findFirst();
+        if (selected.isEmpty()) {
+            return AnswerResult.rejected("Unknown answer id: " + answerId);
+        }
+
+        long answeredAt = System.currentTimeMillis();
+        boolean correct = selected.get().isCorrect();
+        int points = ScoringEngine.calculatePoints(
+                correct, p.getQuestionStartedAt(), answeredAt, question.get().getTimeLimit());
+        if (points > 0) {
+            p.addScore(points);
+        }
+
+        p.setProgressIndex(p.getProgressIndex() + 1);
+        p.setQuestionStartedAt(answeredAt);
+        return AnswerResult.accepted(correct, points);
+    }
+
+    public Optional<Question> currentQuestionForPlayer(String nickname) {
+        return findPlayer(nickname).flatMap(p -> questionAt(p.getProgressIndex()));
+    }
+
+    public int progressOf(String nickname) {
+        return findPlayer(nickname).map(Player::getProgressIndex).orElse(0);
+    }
+
+    public boolean isPlayerDone(String nickname) {
+        return findPlayer(nickname).map(p -> p.getProgressIndex() >= questionCount()).orElse(false);
+    }
+
+    public synchronized boolean markFinishedOnce() {
+        if (state == GameState.FINISHED || players.isEmpty()) {
+            return false;
+        }
+        boolean allDone = players.stream().allMatch(p -> p.getProgressIndex() >= questionCount());
+        if (!allDone) {
+            return false;
+        }
+        this.state = GameState.FINISHED;
+        return true;
+    }
+
     private Optional<Player> findPlayer(String nickname) {
         return players.stream()
                 .filter(p -> p.getNickname().equalsIgnoreCase(nickname))

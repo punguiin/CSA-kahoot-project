@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { gameClient, MessageType } from '../net/gameClient';
+
+interface RosterPlayer { nickname: string; score: number; }
 
 const Lobby = () => {
     const { pin } = useParams();
@@ -9,16 +12,39 @@ const Lobby = () => {
     const autoUsername = location.state?.username;
 
     const [nickname, setNickname] = useState(autoUsername || '');
-    const [isJoined, setIsJoined] = useState(!!autoUsername);
-    const [players, setPlayers] = useState<string[]>(
-        autoUsername ? ['Микола', 'Назар', 'Нікіта', autoUsername] : ['Микола', 'Назар', 'Нікіта']
-    );
+    const [isJoined, setIsJoined] = useState(false);
+    const [players, setPlayers] = useState<string[]>([]);
+    const [error, setError] = useState('');
+    const [isJoining, setIsJoining] = useState(false);
 
-    const handleJoin = (e: React.FormEvent) => {
+    // Room events flow through the shared client; the QUESTION push means the host started the game.
+    useEffect(() => {
+        const names = (p: any) => setPlayers((p.players as RosterPlayer[]).map((x) => x.nickname));
+        const offJoined = gameClient.on(MessageType.PLAYER_JOINED, names);
+        const offLeft = gameClient.on(MessageType.PLAYER_LEFT, names);
+        const offQuestion = gameClient.on(MessageType.QUESTION, () => navigate('/game'));
+        return () => {
+            offJoined();
+            offLeft();
+            offQuestion();
+        };
+    }, [navigate]);
+
+    const handleJoin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (nickname.trim()) {
-            setPlayers([...players, nickname]);
+        if (!nickname.trim()) return;
+        setError('');
+        setIsJoining(true);
+        try {
+            await gameClient.connect();
+            const accepted = gameClient.once(MessageType.JOIN_ACCEPTED);
+            gameClient.send(MessageType.REQ_JOIN_ROOM, { pin, nickname: nickname.trim() });
+            await accepted;
             setIsJoined(true);
+        } catch (err: any) {
+            setError(err.message || 'Не вдалося приєднатися до кімнати');
+        } finally {
+            setIsJoining(false);
         }
     };
 
@@ -37,11 +63,17 @@ const Lobby = () => {
                             className="text-center text-2xl font-bold border-2 border-gray-300 rounded-md p-3 outline-none focus:border-blue-500 transition-colors"
                             maxLength={15}
                         />
+                        {error && (
+                            <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm text-center font-medium">
+                                {error}
+                            </div>
+                        )}
                         <button
                             type="submit"
-                            className="bg-gray-900 text-white text-xl font-bold py-3 rounded-md hover:bg-gray-800 transition-colors"
+                            disabled={isJoining}
+                            className="bg-gray-900 text-white text-xl font-bold py-3 rounded-md hover:bg-gray-800 transition-colors disabled:bg-gray-500"
                         >
-                            Приєднатися
+                            {isJoining ? 'Приєднання...' : 'Приєднатися'}
                         </button>
                     </form>
                 </div>
@@ -72,13 +104,6 @@ const Lobby = () => {
                     </div>
                 ))}
             </div>
-
-            <button
-                onClick={() => navigate('/game')}
-                className="absolute bottom-10 bg-yellow-400 text-yellow-900 px-8 py-4 rounded-full font-black text-xl shadow-xl border-4 border-yellow-500 hover:bg-yellow-300 hover:scale-105 transition-all"
-            >
-                DEV: Імітувати старт гри
-            </button>
         </div>
     );
 };

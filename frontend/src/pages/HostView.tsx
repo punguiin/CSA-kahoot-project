@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { gameClient, MessageType } from '../net/gameClient';
 
-const MOCK_QUESTION = {
-    id: 1,
-    text: "Який протокол використовується для безпечного передавання гіпертексту?",
-    answers: ["HTTP", "FTP", "HTTPS", "TCP/IP"],
-    timeLimit: 15
-};
+interface WireQuestion {
+    pin: string;
+    index: number;
+    text: string;
+    timeLimit: number;
+    answers: { id: number; text: string }[];
+}
 
-const MOCK_LEADERBOARD = [
-    { rank: 1, username: "nazar", score: 4500 },
-    { rank: 2, username: "nikita", score: 4250 },
-    { rank: 3, username: "student_123", score: 3800 }
-];
+interface BoardEntry { nickname: string; score: number; }
 
 const SHAPES = [
     <svg viewBox="0 0 24 24" fill="currentColor" className="w-10 h-10 text-white drop-shadow-md"><path d="M12 2L22 20H2Z" /></svg>,
@@ -21,41 +19,65 @@ const SHAPES = [
     <svg viewBox="0 0 24 24" fill="currentColor" className="w-10 h-10 text-white drop-shadow-md"><path d="M3 3H21V21H3V3Z" /></svg>
 ];
 
-const COLORS = [
-    "bg-red-500", "bg-blue-500", "bg-yellow-500", "bg-green-500"
-];
+const COLORS = ["bg-red-500", "bg-blue-500", "bg-yellow-500", "bg-green-500"];
 
 const HostView = () => {
     const { pin } = useParams();
     const navigate = useNavigate();
-    const [phase, setPhase] = useState<'LOBBY' | 'QUESTION' | 'LEADERBOARD'>('LOBBY');
-    const [timeLeft, setTimeLeft] = useState(MOCK_QUESTION.timeLimit);
-    const [players] = useState<string[]>(['Микола', 'Назар', 'Нікіта']);
-    const [answersCount, setAnswersCount] = useState(0);
+    const [phase, setPhase] = useState<'LOBBY' | 'QUESTION' | 'LEADERBOARD' | 'FINISHED'>('LOBBY');
+    const [players, setPlayers] = useState<string[]>([]);
+    const [question, setQuestion] = useState<WireQuestion | null>(null);
+    const [leaderboard, setLeaderboard] = useState<BoardEntry[]>([]);
+    const [timeLeft, setTimeLeft] = useState(0);
 
     useEffect(() => {
-        if (phase === 'QUESTION') {
-            if (timeLeft > 0) {
-                const timerId = setTimeout(() => {
-                    setTimeLeft(timeLeft - 1);
-                    if (timeLeft % 4 === 0 && answersCount < players.length) {
-                        setAnswersCount(prev => prev + 1);
-                    }
-                }, 1000);
-                return () => clearTimeout(timerId);
-            } else {
+        const roster = (p: any) => setPlayers((p.players as BoardEntry[]).map((x) => x.nickname));
+        const offJoined = gameClient.on(MessageType.PLAYER_JOINED, roster);
+        const offLeft = gameClient.on(MessageType.PLAYER_LEFT, roster);
+        const offQuestion = gameClient.on(MessageType.QUESTION, (q: WireQuestion) => {
+            setQuestion(q);
+            setTimeLeft(q.timeLimit);
+            setPhase('QUESTION');
+        });
+        const offLeaderboard = gameClient.on(MessageType.LEADERBOARD, (p: any) => {
+            setLeaderboard(p.leaderboard);
+            // GET_LEADERBOARD reply during the lobby just seeds the roster; only a real
+            // round end (state === LEADERBOARD) advances the host screen.
+            setPlayers((p.leaderboard as BoardEntry[]).map((x) => x.nickname));
+            if (p.state === 'LEADERBOARD') {
                 setPhase('LEADERBOARD');
             }
+        });
+        const offFinished = gameClient.on(MessageType.GAME_FINISHED, (p: any) => {
+            setLeaderboard(p.leaderboard);
+            setPhase('FINISHED');
+        });
+
+        // Seed the current roster in case players joined before this screen mounted.
+        gameClient.send(MessageType.REQ_GET_LEADERBOARD, {});
+
+        return () => {
+            offJoined();
+            offLeft();
+            offQuestion();
+            offLeaderboard();
+            offFinished();
+        };
+    }, []);
+
+    // Host owns the clock: when it runs out, end the round and let the server broadcast standings.
+    useEffect(() => {
+        if (phase !== 'QUESTION') return;
+        if (timeLeft > 0) {
+            const id = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+            return () => clearTimeout(id);
         }
-    }, [timeLeft, phase, answersCount, players.length]);
+        gameClient.send(MessageType.REQ_END_ROUND, {});
+    }, [phase, timeLeft]);
 
-    const startGame = () => {
-        setPhase('QUESTION');
-    };
-
-    const skipTimer = () => {
-        setTimeLeft(0);
-    };
+    const startGame = () => gameClient.send(MessageType.REQ_START_QUIZ, {});
+    const skipTimer = () => setTimeLeft(0);
+    const nextQuestion = () => gameClient.send(MessageType.REQ_NEXT_QUESTION, {});
 
     if (phase === 'LOBBY') {
         return (
@@ -73,7 +95,8 @@ const HostView = () => {
                     </div>
                     <button
                         onClick={startGame}
-                        className="bg-green-500 text-white px-10 py-4 rounded-full font-black text-2xl shadow-xl hover:bg-green-400 hover:scale-105 transition-all"
+                        disabled={players.length === 0}
+                        className="bg-green-500 text-white px-10 py-4 rounded-full font-black text-2xl shadow-xl hover:bg-green-400 hover:scale-105 transition-all disabled:bg-gray-300 disabled:scale-100"
                     >
                         Почати гру
                     </button>
@@ -90,22 +113,32 @@ const HostView = () => {
         );
     }
 
-    if (phase === 'LEADERBOARD') {
+    if (phase === 'LEADERBOARD' || phase === 'FINISHED') {
+        const finished = phase === 'FINISHED';
         return (
             <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-8">
                 <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col">
                     <div className="bg-gray-900 text-white p-8 text-center flex justify-between items-center">
-                        <h2 className="text-4xl font-bold">Таблиця лідерів</h2>
-                        <button
-                            onClick={() => navigate('/dashboard')}
-                            className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold text-xl hover:bg-blue-700 transition-colors"
-                        >
-                            Завершити гру
-                        </button>
+                        <h2 className="text-4xl font-bold">{finished ? 'Підсумки гри' : 'Таблиця лідерів'}</h2>
+                        {finished ? (
+                            <button
+                                onClick={() => navigate('/dashboard')}
+                                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold text-xl hover:bg-blue-700 transition-colors"
+                            >
+                                Завершити гру
+                            </button>
+                        ) : (
+                            <button
+                                onClick={nextQuestion}
+                                className="bg-green-500 text-white px-8 py-3 rounded-lg font-bold text-xl hover:bg-green-400 transition-colors"
+                            >
+                                Далі
+                            </button>
+                        )}
                     </div>
 
                     <div className="p-10 flex flex-col gap-6">
-                        {MOCK_LEADERBOARD.map((player, index) => (
+                        {leaderboard.map((player, index) => (
                             <div
                                 key={index}
                                 className={`flex items-center justify-between p-6 rounded-2xl font-bold text-3xl ${
@@ -116,8 +149,8 @@ const HostView = () => {
                                 }`}
                             >
                                 <div className="flex items-center gap-6">
-                                    <span className="w-12 text-center">{player.rank}.</span>
-                                    <span>@{player.username}</span>
+                                    <span className="w-12 text-center">{index + 1}.</span>
+                                    <span>@{player.nickname}</span>
                                 </div>
                                 <span>{player.score}</span>
                             </div>
@@ -152,8 +185,6 @@ const HostView = () => {
 
             <main className="flex-1 flex flex-col p-8 max-w-7xl mx-auto w-full gap-8">
                 <div className="flex-1 flex flex-col items-center justify-center relative bg-white rounded-3xl shadow-md border border-gray-200 p-12">
-
-                    {/* Блок таймера з кнопкою пропуску */}
                     <div className="absolute left-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-3">
                         <div className="w-32 h-32 bg-purple-600 rounded-full flex flex-col items-center justify-center shadow-xl border-8 border-purple-200">
                             <span className="text-6xl font-black text-white">{timeLeft}</span>
@@ -167,23 +198,23 @@ const HostView = () => {
                     </div>
 
                     <div className="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
-                        <span className="text-gray-500 font-bold uppercase tracking-widest mb-2 text-sm">Відповіло</span>
-                        <span className="text-6xl font-black text-gray-800">{answersCount} <span className="text-3xl text-gray-400">/ {players.length}</span></span>
+                        <span className="text-gray-500 font-bold uppercase tracking-widest mb-2 text-sm">Гравців</span>
+                        <span className="text-6xl font-black text-gray-800">{players.length}</span>
                     </div>
 
                     <h1 className="text-5xl font-bold text-center text-gray-800 max-w-3xl leading-tight">
-                        {MOCK_QUESTION.text}
+                        {question?.text}
                     </h1>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 h-64">
-                    {MOCK_QUESTION.answers.map((answer, index) => (
-                        <div key={index} className={`flex items-center p-8 rounded-2xl ${COLORS[index]} shadow-md`}>
+                    {question?.answers.map((answer, index) => (
+                        <div key={answer.id} className={`flex items-center p-8 rounded-2xl ${COLORS[index % COLORS.length]} shadow-md`}>
                             <div className="w-16 flex justify-center shrink-0">
-                                {SHAPES[index]}
+                                {SHAPES[index % SHAPES.length]}
                             </div>
                             <span className="text-white text-4xl font-bold ml-6 text-left drop-shadow-md">
-                                {answer}
+                                {answer.text}
                             </span>
                         </div>
                     ))}

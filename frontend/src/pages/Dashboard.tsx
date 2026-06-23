@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { gameClient, MessageType } from '../net/gameClient';
 
 interface Quiz {
     id: number;
@@ -56,6 +57,18 @@ const Dashboard = () => {
         e.preventDefault();
         if (joinPin.trim()) {
             navigate(`/lobby/${joinPin}`, { state: { username: 'user123' } });
+        }
+    };
+
+    const handleHost = async (quizId: number) => {
+        try {
+            await gameClient.connect();
+            const created = gameClient.once(MessageType.ROOM_CREATED);
+            gameClient.send(MessageType.REQ_CREATE_ROOM, { quizId });
+            const pkt = await created;
+            navigate(`/host/${pkt.payload.pin}`);
+        } catch (err: any) {
+            alert(err.message || 'Не вдалося створити кімнату');
         }
     };
 
@@ -190,7 +203,7 @@ const Dashboard = () => {
                                             {quiz.questionsCount} запитань • Створено {quiz.date}
                                         </div>
                                         <div className="flex gap-3 mt-auto">
-                                            <button onClick={() => navigate('/host/482910')} className="flex-1 bg-green-500 text-white py-2 rounded-md font-bold hover:bg-green-600 transition-colors">
+                                            <button onClick={() => handleHost(quiz.id)} className="flex-1 bg-green-500 text-white py-2 rounded-md font-bold hover:bg-green-600 transition-colors">
                                                 Запустити
                                             </button>
                                             <button onClick={() => navigate('/create', { state: { editQuiz: quiz } })} className="px-4 bg-gray-100 text-gray-700 py-2 rounded-md font-bold hover:bg-gray-200 transition-colors">

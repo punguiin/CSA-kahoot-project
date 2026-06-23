@@ -245,6 +245,31 @@ class SessionDispatcherTest {
     }
 
     @Test
+    void blockedUserCannotCreateRoomOverWs() {
+        Connection connection = new DatabaseConnection(":memory:").getConnection();
+        QuizDAO qd = new QuizDAOImpl(connection);
+        GameStateManager gsm = new GameStateManager();
+        GameService gs = new GameService(gsm, qd, new GameHistoryDAOImpl(connection));
+        ConnectionRegistry reg = new ConnectionRegistry();
+        SessionDispatcher blocking = new SessionDispatcher(gs, gsm, reg, id -> id == 99);
+        int qid = qd.insert(buildQuiz());
+
+        RecordingSink blocked = new RecordingSink(7);
+        reg.register(blocked);
+        Message m = new Message(MessageType.REQ_CREATE_ROOM.code(), 0,
+                PayloadCodec.bytes("{\"quizId\":" + qid + ",\"userId\":99}"));
+        blocking.onPacket(7, new Packet(Packet.MAGIC, (byte) 7, 1L, 0, m));
+        assertThat(blocked.types()).containsExactly(MessageType.ERROR);
+
+        RecordingSink ok = new RecordingSink(8);
+        reg.register(ok);
+        Message m2 = new Message(MessageType.REQ_CREATE_ROOM.code(), 0,
+                PayloadCodec.bytes("{\"quizId\":" + qid + ",\"userId\":1}"));
+        blocking.onPacket(8, new Packet(Packet.MAGIC, (byte) 8, 1L, 0, m2));
+        assertThat(ok.types()).containsExactly(MessageType.ROOM_CREATED);
+    }
+
+    @Test
     void rejoinUnknownPlayerIsRejected() {
         String pin = createRoomAndJoinEveryone();
 

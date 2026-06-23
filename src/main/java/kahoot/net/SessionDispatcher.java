@@ -17,6 +17,7 @@ import kahoot.protocol.PayloadCodec;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.IntPredicate;
 
 public final class SessionDispatcher {
 
@@ -25,13 +26,20 @@ public final class SessionDispatcher {
     private final GameService gameService;
     private final GameStateManager gameStateManager;
     private final ConnectionRegistry registry;
+    private final IntPredicate blockedUser;
     private final AtomicLong eventPktId = new AtomicLong(0);
 
     public SessionDispatcher(GameService gameService, GameStateManager gameStateManager,
                              ConnectionRegistry registry) {
+        this(gameService, gameStateManager, registry, id -> false);
+    }
+
+    public SessionDispatcher(GameService gameService, GameStateManager gameStateManager,
+                             ConnectionRegistry registry, IntPredicate blockedUser) {
         this.gameService = gameService;
         this.gameStateManager = gameStateManager;
         this.registry = registry;
+        this.blockedUser = blockedUser;
     }
 
     public void onPacket(int connId, Packet pkt) {
@@ -59,6 +67,13 @@ public final class SessionDispatcher {
 
         if (type == MessageType.REQ_REJOIN) {
             handleRejoin(connId, reqPktId, json);
+            return;
+        }
+
+        // A blocked account may not start hosting a game over the WS channel either.
+        if (type == MessageType.REQ_CREATE_ROOM && json.get("userId") instanceof Long uid
+                && blockedUser.test(uid.intValue())) {
+            sendError(connId, reqPktId, "Обліковий запис заблоковано");
             return;
         }
 

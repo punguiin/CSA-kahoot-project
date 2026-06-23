@@ -73,6 +73,23 @@ const Dashboard = () => {
 
     }, [activeTab, role]);
 
+    useEffect(() => {
+        if (!user) return;
+        const check = () => api.me(user.id)
+            .then((u) => {
+                if (u.status === 'BLOCKED') {
+                    clearUser();
+                    alert('Ваш акаунт заблоковано адміністратором');
+                    navigate('/');
+                }
+            })
+            .catch(() => {});
+        check();
+        const id = setInterval(check, 8000);
+        return () => clearInterval(id);
+
+    }, []);
+
     if (!user) {
         return null;
     }
@@ -88,7 +105,7 @@ const Dashboard = () => {
         try {
             await gameClient.connect();
             const created = gameClient.once(MessageType.ROOM_CREATED);
-            gameClient.send(MessageType.REQ_CREATE_ROOM, { quizId });
+            gameClient.send(MessageType.REQ_CREATE_ROOM, { quizId, userId: user.id });
             const pkt = await created;
             gameClient.setSession(pkt.payload.pin, null, 'HOST');
             navigate(`/host/${pkt.payload.pin}`);

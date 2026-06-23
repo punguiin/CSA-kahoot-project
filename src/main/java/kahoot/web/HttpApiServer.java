@@ -54,6 +54,7 @@ public final class HttpApiServer {
         server.createContext("/sessions", guard(this::handleSessions));
         server.createContext("/login", guard(this::handleLogin));
         server.createContext("/register", guard(this::handleRegister));
+        server.createContext("/me", guard(this::handleMe));
         server.start();
         System.out.println("HttpApiServer: listening on " + server.getAddress().getPort());
     }
@@ -165,6 +166,20 @@ public final class HttpApiServer {
         }
     }
 
+    private void handleMe(HttpExchange ex) throws IOException {
+        String[] seg = segments(ex);
+        if (!ex.getRequestMethod().equals("GET") || seg.length != 3) {
+            send(ex, 405, PayloadCodec.error("Unsupported"));
+            return;
+        }
+        User user = userDAO.findById(Integer.parseInt(seg[2])).orElse(null);
+        if (user == null) {
+            send(ex, 404, PayloadCodec.error("User not found"));
+        } else {
+            send(ex, 200, userJson(user));
+        }
+    }
+
     private void handleLogin(HttpExchange ex) throws IOException {
         if (!ex.getRequestMethod().equals("POST")) {
             send(ex, 405, PayloadCodec.error("Unsupported"));
@@ -268,10 +283,14 @@ public final class HttpApiServer {
             var headers = ex.getResponseHeaders();
             headers.add("Access-Control-Allow-Origin", "*");
             headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            headers.add("Access-Control-Allow-Headers", "Content-Type");
+            headers.add("Access-Control-Allow-Headers", "Content-Type, X-User-Id");
             if (ex.getRequestMethod().equals("OPTIONS")) {
                 ex.sendResponseHeaders(204, -1);
                 ex.close();
+                return;
+            }
+            if (isBlocked(ex)) {
+                send(ex, 403, PayloadCodec.error("Обліковий запис заблоковано"));
                 return;
             }
             try {
@@ -285,6 +304,30 @@ public final class HttpApiServer {
     @FunctionalInterface
     private interface ThrowingHandler {
         void handle(HttpExchange ex) throws IOException;
+    }
+
+    /**
+     * Server-side block enforcement: the client sends its account id in X-User-Id; if that account
+     * is BLOCKED, every request is refused except the ones needed to recover (login/register) or to
+     * notice the block (/me). Soft-keyed (the id is not a signed token) but it stops a logged-in
+     * session from acting after an admin blocks it.
+     */
+    private boolean isBlocked(HttpExchange ex) {
+        String path = ex.getRequestURI().getPath();
+        if (path.startsWith("/login") || path.startsWith("/register") || path.startsWith("/me")) {
+            return false;
+        }
+        String header = ex.getRequestHeaders().getFirst("X-User-Id");
+        if (header == null || header.isBlank()) {
+            return false;
+        }
+        try {
+            return userDAO.findById(Integer.parseInt(header))
+                    .map(u -> User.BLOCKED.equals(u.getStatus()))
+                    .orElse(false);
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private static String[] segments(HttpExchange ex) {

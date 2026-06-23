@@ -27,9 +27,14 @@ export function clearUser(): void {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const user = currentUser();
+    if (user) {
+        headers['X-User-Id'] = String(user.id);
+    }
     const res = await fetch(`${API_URL}${path}`, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     const text = await res.text();
@@ -45,6 +50,7 @@ export const api = {
         request<AuthUser>('POST', '/login', { username, password }),
     register: (username: string, password: string) =>
         request<AuthUser>('POST', '/register', { username, password }),
+    me: (id: number) => request<AuthUser>('GET', `/me/${id}`),
 
     quizzes: () => request<any[]>('GET', '/quizzes'),
     quiz: (id: number) => request<any>('GET', `/quizzes/${id}`),

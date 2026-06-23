@@ -39,7 +39,8 @@ public class Main {
         KahootServer tcpServer = new KahootServer(tcpPort, cipher, tcpRegistry, tcpDispatcher);
 
         ConnectionRegistry wsRegistry = new ConnectionRegistry();
-        SessionDispatcher wsDispatcher = new SessionDispatcher(gameService, gameStateManager, wsRegistry);
+        SessionDispatcher wsDispatcher = new SessionDispatcher(gameService, gameStateManager, wsRegistry,
+                id -> userDao.findById(id).map(u -> kahoot.model.User.BLOCKED.equals(u.getStatus())).orElse(false));
         WebSocketServer wsServer = new WebSocketServer(
                 wsPort, cipher, wsRegistry::register, wsDispatcher::onPacket, wsDispatcher::onDisconnect);
 

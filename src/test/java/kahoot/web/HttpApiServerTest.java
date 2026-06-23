@@ -103,6 +103,30 @@ class HttpApiServerTest {
     }
 
     @Test
+    void blockedUsersRequestsAreRefusedServerSide() throws Exception {
+        int id = userDAO.findByUsername("admin").orElseThrow().getId();
+        userDAO.updateStatus(id, "BLOCKED");
+
+        String base = "http://localhost:" + server.port();
+        HttpRequest blocked = HttpRequest.newBuilder(URI.create(base + "/quizzes"))
+                .header("X-User-Id", String.valueOf(id)).GET().build();
+        assertThat(http.send(blocked, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(403);
+
+        // /me stays reachable so the client can detect the block and log itself out.
+        HttpRequest me = HttpRequest.newBuilder(URI.create(base + "/me/" + id))
+                .header("X-User-Id", String.valueOf(id)).GET().build();
+        assertThat(http.send(me, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void meReflectsBlockSoAClientCanEjectItself() throws Exception {
+        int id = userDAO.findByUsername("admin").orElseThrow().getId();
+        assertThat(send("GET", "/me/" + id, null).body()).contains("\"status\":\"ACTIVE\"");
+        send("POST", "/users/" + id + "/status", "{\"status\":\"BLOCKED\"}");
+        assertThat(send("GET", "/me/" + id, null).body()).contains("\"status\":\"BLOCKED\"");
+    }
+
+    @Test
     void listsUsersWithStatus() throws Exception {
         HttpResponse<String> r = send("GET", "/users", null);
         assertThat(r.statusCode()).isEqualTo(200);

@@ -10,25 +10,40 @@ const Lobby = () => {
     const location = useLocation();
 
     const autoUsername = location.state?.username;
+    const resumable = gameClient.session?.pin === pin && gameClient.session?.role === 'PLAYER';
 
-    const [nickname, setNickname] = useState(autoUsername || '');
-    const [isJoined, setIsJoined] = useState(false);
+    const [nickname, setNickname] = useState(autoUsername || gameClient.session?.nickname || '');
+    const [isJoined, setIsJoined] = useState(resumable);
     const [players, setPlayers] = useState<string[]>([]);
     const [error, setError] = useState('');
     const [isJoining, setIsJoining] = useState(false);
 
-    // Room events flow through the shared client; the QUESTION push means the host started the game.
     useEffect(() => {
         const names = (p: any) => setPlayers((p.players as RosterPlayer[]).map((x) => x.nickname));
         const offJoined = gameClient.on(MessageType.PLAYER_JOINED, names);
         const offLeft = gameClient.on(MessageType.PLAYER_LEFT, names);
         const offQuestion = gameClient.on(MessageType.QUESTION, () => navigate('/game'));
+        const offClosed = gameClient.on(MessageType.ROOM_CLOSED, () => {
+            gameClient.clearSession();
+            navigate('/');
+        });
         return () => {
             offJoined();
             offLeft();
             offQuestion();
+            offClosed();
         };
     }, [navigate]);
+
+    useEffect(() => {
+        if (resumable && !gameClient.isOpen()) {
+            gameClient.resume().catch(() => {
+                gameClient.clearSession();
+                setIsJoined(false);
+            });
+        }
+
+    }, []);
 
     const handleJoin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -40,6 +55,7 @@ const Lobby = () => {
             const accepted = gameClient.once(MessageType.JOIN_ACCEPTED);
             gameClient.send(MessageType.REQ_JOIN_ROOM, { pin, nickname: nickname.trim() });
             await accepted;
+            gameClient.setSession(pin!, nickname.trim(), 'PLAYER');
             setIsJoined(true);
         } catch (err: any) {
             setError(err.message || 'Не вдалося приєднатися до кімнати');

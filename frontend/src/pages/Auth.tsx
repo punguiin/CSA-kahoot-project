@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api, setUser } from '../net/api';
 
 const Login = () => {
     const [isLoginView, setIsLoginView] = useState(true);
@@ -24,19 +25,13 @@ const Login = () => {
         setIsLoading(true);
 
         try {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            if (isLoginView) {
-                if (username === 'admin' && password === 'admin') {
-                    navigate('/dashboard');
-                } else {
-                    throw new Error('Неправильний логін або пароль');
-                }
-            } else {
-                navigate('/dashboard');
-            }
+            const user = isLoginView
+                ? await api.login(username, password)
+                : await api.register(username, password);
+            setUser(user);
+            navigate('/dashboard');
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || 'Сталася помилка');
         } finally {
             setIsLoading(false);
         }

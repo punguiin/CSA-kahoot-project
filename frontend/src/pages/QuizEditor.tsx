@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { api, currentUser } from '../net/api';
 
 interface Answer {
     text: string;
@@ -31,37 +32,47 @@ const QuizEditor = () => {
     const location = useLocation();
 
     const editQuiz = location.state?.editQuiz;
+    const editId: number | undefined = editQuiz?.id;
 
-    const [quizTitle, setQuizTitle] = useState(editQuiz?.title || '');
-
-    const [questions, setQuestions] = useState<Question[]>(() => {
-        if (editQuiz) {
-            return [{
-                id: '1',
-                text: `Перше запитання з вікторини: ${editQuiz.title}`,
-                timeLimit: 20,
-                answers: [
-                    { text: 'Правильний варіант', isCorrect: true },
-                    { text: 'Неправильний', isCorrect: false },
-                    { text: 'Теж неправильний', isCorrect: false },
-                    { text: 'Зовсім повз', isCorrect: false }
-                ]
-            }];
-        }
-        return [{
-            id: '1',
-            text: '',
-            timeLimit: 15,
-            answers: [
-                { text: '', isCorrect: false },
-                { text: '', isCorrect: false },
-                { text: '', isCorrect: false },
-                { text: '', isCorrect: false }
-            ]
-        }];
+    const emptyQuestion = (): Question => ({
+        id: Date.now().toString() + Math.floor(Math.random() * 1000),
+        text: '',
+        timeLimit: 15,
+        answers: [
+            { text: '', isCorrect: false },
+            { text: '', isCorrect: false },
+            { text: '', isCorrect: false },
+            { text: '', isCorrect: false }
+        ]
     });
 
+    const [quizTitle, setQuizTitle] = useState(editQuiz?.title || '');
+    const [description, setDescription] = useState(editQuiz?.description || '');
+    const [questions, setQuestions] = useState<Question[]>([emptyQuestion()]);
     const [activeQuestionId, setActiveQuestionId] = useState<string>(questions[0].id);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!editId) return;
+        api.quiz(editId)
+            .then((data) => {
+                setQuizTitle(data.title);
+                setDescription(data.description || '');
+                const loaded: Question[] = (data.questions || []).map((q: any, i: number) => ({
+                    id: `${i + 1}`,
+                    text: q.text,
+                    timeLimit: q.timeLimit,
+                    answers: q.answers.map((a: any) => ({ text: a.text, isCorrect: a.isCorrect })),
+                }));
+                if (loaded.length > 0) {
+                    setQuestions(loaded);
+                    setActiveQuestionId(loaded[0].id);
+                }
+            })
+            .catch((e) => setError(e.message));
+
+    }, []);
 
     const activeQuestion = questions.find(q => q.id === activeQuestionId) || questions[0];
 
@@ -113,9 +124,37 @@ const QuizEditor = () => {
         updateActiveQuestion({ answers: newAnswers });
     };
 
-    const handleSave = () => {
-        console.log({ title: quizTitle, questions });
-        navigate('/dashboard');
+    const handleSave = async () => {
+        setError('');
+        if (!quizTitle.trim()) {
+            setError('Введіть назву вікторини');
+            return;
+        }
+        const payload = {
+            title: quizTitle.trim(),
+            description,
+            creatorId: currentUser()?.id ?? 1,
+            questions: questions.map((q) => ({
+                text: q.text,
+                timeLimit: q.timeLimit,
+                answers: q.answers
+                    .filter((a) => a.text.trim() !== '')
+                    .map((a) => ({ text: a.text, isCorrect: a.isCorrect })),
+            })),
+        };
+        setSaving(true);
+        try {
+            if (editId) {
+                await api.updateQuiz(editId, payload);
+            } else {
+                await api.createQuiz(payload);
+            }
+            navigate('/dashboard');
+        } catch (e: any) {
+            setError(e.message || 'Не вдалося зберегти');
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -147,12 +186,17 @@ const QuizEditor = () => {
                     </button>
                     <button
                         onClick={handleSave}
-                        className="bg-blue-600 text-white px-8 py-2 rounded-md font-bold shadow-md hover:bg-blue-700 transition-colors"
+                        disabled={saving}
+                        className="bg-blue-600 text-white px-8 py-2 rounded-md font-bold shadow-md hover:bg-blue-700 transition-colors disabled:bg-blue-400"
                     >
-                        Зберегти
+                        {saving ? 'Збереження...' : 'Зберегти'}
                     </button>
                 </div>
             </header>
+
+            {error && (
+                <div className="bg-red-100 text-red-700 px-6 py-3 font-medium text-sm shrink-0">{error}</div>
+            )}
 
             <div className="flex-1 flex overflow-hidden">
                 <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">

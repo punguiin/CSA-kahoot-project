@@ -34,8 +34,8 @@ const Game = () => {
     const [view, setView] = useState<'QUESTION' | 'LEADERBOARD' | 'PODIUM'>('QUESTION');
     const [leaderboard, setLeaderboard] = useState<BoardEntry[]>([]);
     const [errorMsg, setErrorMsg] = useState('');
+    const [closed, setClosed] = useState(false);
 
-    // Drive the whole screen from server pushes — the host controls transitions.
     useEffect(() => {
         const offQuestion = gameClient.on(MessageType.QUESTION, (q: WireQuestion) => {
             setQuestion(q);
@@ -44,7 +44,7 @@ const Game = () => {
             setView('QUESTION');
         });
         const offResult = gameClient.on(MessageType.ANSWER_RESULT, () => {
-            // accepted — UI already shows the chosen answer; nothing else required
+
         });
         const offLeaderboard = gameClient.on(MessageType.LEADERBOARD, (p: any) => {
             setLeaderboard(p.leaderboard);
@@ -54,15 +54,30 @@ const Game = () => {
             setLeaderboard(p.leaderboard);
             setView('PODIUM');
         });
+        const offClosed = gameClient.on(MessageType.ROOM_CLOSED, () => {
+            gameClient.clearSession();
+            setClosed(true);
+        });
         return () => {
             offQuestion();
             offResult();
             offLeaderboard();
             offFinished();
+            offClosed();
         };
     }, []);
 
-    // Local visual countdown only; the server (host) decides when the round actually ends.
+    useEffect(() => {
+        if (!gameClient.isOpen()) {
+            if (gameClient.session?.role === 'PLAYER') {
+                gameClient.resume().catch(() => navigate('/'));
+            } else {
+                navigate('/');
+            }
+        }
+
+    }, []);
+
     useEffect(() => {
         if (view !== 'QUESTION' || timeLeft <= 0) return;
         const id = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
@@ -80,11 +95,25 @@ const Game = () => {
         gameClient.send(MessageType.REQ_SUBMIT_ANSWER, { answerId: question.answers[index].id });
     };
 
+    if (closed) {
+        return (
+            <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4 text-center">
+                <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full">
+                    <h2 className="text-3xl font-black text-gray-800 mb-4">Гру завершено</h2>
+                    <p className="text-gray-600 mb-8 font-medium">Адміністратор примусово завершив цю ігрову сесію.</p>
+                    <button onClick={() => navigate('/')} className="w-full bg-gray-100 text-gray-800 px-6 py-4 rounded-xl font-bold hover:bg-gray-200 transition-colors">
+                        Повернутися на головну
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (!question) {
         return (
             <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4 text-white">
                 <h1 className="text-3xl font-bold mb-6">Очікуємо початку гри...</h1>
-                <button onClick={() => navigate('/')} className="bg-white/20 px-6 py-3 rounded-lg font-bold">
+                <button onClick={() => { gameClient.clearSession(); navigate('/'); }} className="bg-white/20 px-6 py-3 rounded-lg font-bold">
                     На головну
                 </button>
             </div>
@@ -117,7 +146,7 @@ const Game = () => {
                         </div>
                     ))}
                 </div>
-                <button onClick={() => navigate('/')} className="bg-white text-gray-800 px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-colors">
+                <button onClick={() => { gameClient.clearSession(); navigate('/'); }} className="bg-white text-gray-800 px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-colors">
                     На головну
                 </button>
             </div>

@@ -36,6 +36,7 @@ kahoot.db
 node_modules/
 frontend/dist/
 frontend/dist-ssr/
+.vite/
 *.local
 
 # Logs

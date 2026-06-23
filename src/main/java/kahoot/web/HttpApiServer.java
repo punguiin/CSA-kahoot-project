@@ -267,7 +267,7 @@ public final class HttpApiServer {
         return ex -> {
             var headers = ex.getResponseHeaders();
             headers.add("Access-Control-Allow-Origin", "*");
-            headers.add("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+            headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
             headers.add("Access-Control-Allow-Headers", "Content-Type");
             if (ex.getRequestMethod().equals("OPTIONS")) {
                 ex.sendResponseHeaders(204, -1);

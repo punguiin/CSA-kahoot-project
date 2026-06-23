@@ -80,7 +80,7 @@ const Game = () => {
 
     useEffect(() => {
         if (view !== 'QUESTION' || timeLeft <= 0) return;
-        const id = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+        const id = setTimeout(() => setTimeLeft(t => t - 1), 1000);
         return () => clearTimeout(id);
     }, [view, timeLeft]);
 
@@ -185,6 +185,8 @@ const Game = () => {
         );
     }
 
+    const timedOut = timeLeft <= 0 && selectedAnswer === null;
+
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col relative">
             <header className="bg-white shadow-sm p-4 flex justify-between items-center z-10">
@@ -203,12 +205,22 @@ const Game = () => {
 
             <main className="flex-1 flex flex-col p-4 md:p-6 max-w-5xl mx-auto w-full gap-6">
                 <div className="flex-1 flex items-center justify-center relative bg-white rounded-2xl shadow-sm border border-gray-200 p-6 md:p-10">
-                    <div className="absolute left-6 top-1/2 -translate-y-1/2 w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center shadow-lg border-4 border-purple-200 hidden md:flex">
-                        <span className="text-2xl font-black text-white">{timeLeft}</span>
+                    <div className={`absolute left-6 top-1/2 -translate-y-1/2 w-16 h-16 rounded-full flex items-center justify-center shadow-lg border-4 hidden md:flex transition-colors ${
+                        timedOut
+                            ? 'bg-red-600 border-red-300'
+                            : timeLeft <= 5
+                                ? 'bg-orange-500 border-orange-200'
+                                : 'bg-purple-600 border-purple-200'
+                    }`}>
+                        <span className="text-2xl font-black text-white">
+                            {timedOut ? '!' : timeLeft}
+                        </span>
                     </div>
 
-                    <div className="absolute top-4 left-4 bg-purple-600 text-white px-3 py-1 rounded-full font-bold text-sm md:hidden">
-                        Час: {timeLeft}
+                    <div className={`absolute top-4 left-4 text-white px-3 py-1 rounded-full font-bold text-sm md:hidden transition-colors ${
+                        timedOut ? 'bg-red-600' : timeLeft <= 5 ? 'bg-orange-500' : 'bg-purple-600'
+                    }`}>
+                        {timedOut ? 'Час вийшов!' : `Час: ${timeLeft}`}
                     </div>
 
                     <h1 className="text-xl md:text-3xl font-bold text-center text-gray-800 max-w-3xl leading-snug">
@@ -251,6 +263,14 @@ const Game = () => {
                         );
                     })}
                 </div>
+
+                {timedOut && (
+                    <div className="text-center mb-4 md:mb-0">
+                        <span className="bg-red-600 text-white px-5 py-2 rounded-full font-bold text-sm shadow-md">
+                            Час вийшов! Ви ще можете обрати відповідь.
+                        </span>
+                    </div>
+                )}
 
                 {selectedAnswer !== null && (
                     <div className="text-center animate-pulse mb-4 md:mb-0">

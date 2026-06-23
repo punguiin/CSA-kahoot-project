@@ -46,7 +46,6 @@ class WebSocketGatewayTest {
     private QuizDAO quizDAO;
     private int quizId;
 
-    /** A JDK WebSocket client that decodes inbound custom packets into a queue. */
     private final class Client {
         final WebSocket ws;
         final BlockingQueue<Packet> received = new LinkedBlockingQueue<>();
@@ -159,7 +158,6 @@ class WebSocketGatewayTest {
         player.send(MessageType.REQ_JOIN_ROOM, "{\"pin\":\"" + pin + "\",\"nickname\":\"alice\"}");
         player.await(MessageType.JOIN_ACCEPTED);
 
-        // The host is pushed the roster update without asking — proves WS server-push works.
         Packet joined = host.await(MessageType.PLAYER_JOINED);
         assertThat(payloadOf(joined).get("joined")).isEqualTo("alice");
 

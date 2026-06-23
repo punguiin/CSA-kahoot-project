@@ -104,7 +104,7 @@ public final class WsConnection implements OutboundSink {
                 }
             }
         } catch (IOException e) {
-            // disconnect / socket close
+
         } finally {
             close();
         }

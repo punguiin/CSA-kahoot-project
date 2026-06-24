@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 
 const Lobby = () => {
     const { pin } = useParams();
+    const navigate = useNavigate();
     const [nickname, setNickname] = useState('');
     const [isJoined, setIsJoined] = useState(false);
     const [players, setPlayers] = useState<string[]>(['Микола', 'Назар', 'Нікіта']);
@@ -43,7 +44,7 @@ const Lobby = () => {
     }
 
     return (
-        <div className="min-h-screen bg-blue-600 flex flex-col items-center p-8">
+        <div className="min-h-screen bg-blue-600 flex flex-col items-center p-8 relative">
             <div className="w-full flex justify-between items-center mb-12">
                 <h2 className="text-white text-3xl font-bold drop-shadow-md">PIN: {pin}</h2>
                 <div className="bg-black/20 px-6 py-2 rounded-full text-white font-bold text-xl">
@@ -65,6 +66,13 @@ const Lobby = () => {
                     </div>
                 ))}
             </div>
+
+            <button
+                onClick={() => navigate('/game')}
+                className="absolute bottom-10 bg-yellow-400 text-yellow-900 px-8 py-4 rounded-full font-black text-xl shadow-xl border-4 border-yellow-500 hover:bg-yellow-300 hover:scale-105 transition-all"
+            >
+                DEV: Імітувати старт гри
+            </button>
         </div>
     );
 };

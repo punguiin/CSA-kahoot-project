@@ -15,7 +15,7 @@ const Home = () => {
 
     return (
         <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4">
-            <h1 className="text-white text-6xl font-bold mb-8 drop-shadow-md">
+            <h1 className="text-white text-6xl font-black mb-8 drop-shadow-md">
                 KMAhoot!
             </h1>
 

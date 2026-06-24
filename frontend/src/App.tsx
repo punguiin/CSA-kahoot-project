@@ -3,6 +3,8 @@ import Home from './pages/Home';
 import Lobby from './pages/Lobby';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
+import Game from './pages/Game';
+import HostView from './pages/HostView';
 
 const router = createBrowserRouter([
     {
@@ -20,7 +22,15 @@ const router = createBrowserRouter([
     {
         path: "/dashboard",
         element: <Dashboard />,
-    }
+    },
+    {
+        path: "/game",
+        element: <Game />,
+    },
+    {
+        path: "/host/:pin",
+        element: <HostView />,
+    },
 ]);
 
 function App() {

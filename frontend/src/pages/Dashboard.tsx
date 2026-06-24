@@ -66,7 +66,7 @@ const Dashboard = () => {
         <div className="min-h-screen bg-gray-50 flex">
             <aside className="w-64 bg-white shadow-md flex flex-col z-10">
                 <div className="p-6 border-b">
-                    <h2 className="text-2xl font-bold text-blue-600">KMAhoot!</h2>
+                    <h2 className="text-2xl tracking-tighter font-black text-blue-600">KMAhoot!</h2>
                     <p className="text-sm text-gray-500 mt-1 font-medium">
                         {role === 'ADMIN' ? 'Адміністратор' : 'Ведучий / Гравець'}
                     </p>
@@ -190,7 +190,7 @@ const Dashboard = () => {
                                             {quiz.questionsCount} запитань • Створено {quiz.date}
                                         </div>
                                         <div className="flex gap-2 mt-auto">
-                                            <button className="flex-1 bg-green-500 text-white py-2 rounded-md font-bold hover:bg-green-600 transition-colors">
+                                            <button onClick={() => navigate('/host/482910')} className="flex-1 bg-green-500 text-white py-2 rounded-md font-bold hover:bg-green-600 transition-colors">
                                                 Запустити
                                             </button>
                                             <button className="px-4 bg-gray-100 text-gray-700 py-2 rounded-md font-bold hover:bg-gray-200 transition-colors">

@@ -41,7 +41,7 @@ const Home = () => {
             <div className="mt-5 text-white text-sm">
                 Хочете створити свою гру?{' '}
                 <button
-                    onClick={() => navigate('/login')}
+                    onClick={() => navigate('/authorization')}
                     className="font-bold underline hover:text-gray-200"
                 >
                     Авторизуйтесь тут

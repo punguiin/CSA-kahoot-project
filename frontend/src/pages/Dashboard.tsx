@@ -169,7 +169,7 @@ const Dashboard = () => {
                             </form>
 
                             {activeTab === 'my-quizzes' && (
-                                <button className="bg-blue-600 text-white px-6 py-3 rounded-md font-bold hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2">
+                                <button onClick={() => navigate('/create')} className="bg-blue-600 text-white px-6 py-3 rounded-md font-bold hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
@@ -189,12 +189,12 @@ const Dashboard = () => {
                                         <div className="text-sm text-gray-500 font-medium mb-4 flex-1">
                                             {quiz.questionsCount} запитань • Створено {quiz.date}
                                         </div>
-                                        <div className="flex gap-2 mt-auto">
+                                        <div className="flex gap-3 mt-auto">
                                             <button onClick={() => navigate('/host/482910')} className="flex-1 bg-green-500 text-white py-2 rounded-md font-bold hover:bg-green-600 transition-colors">
                                                 Запустити
                                             </button>
-                                            <button className="px-4 bg-gray-100 text-gray-700 py-2 rounded-md font-bold hover:bg-gray-200 transition-colors">
-                                                Редаг.
+                                            <button onClick={() => navigate('/create', { state: { editQuiz: quiz } })} className="px-4 bg-gray-100 text-gray-700 py-2 rounded-md font-bold hover:bg-gray-200 transition-colors">
+                                                Редагувати
                                             </button>
                                         </div>
                                     </div>

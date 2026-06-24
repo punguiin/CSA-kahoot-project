@@ -35,6 +35,7 @@ const Game = () => {
     const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
     const [view, setView] = useState<'QUESTION' | 'LEADERBOARD'>('QUESTION');
     const [errorMsg, setErrorMsg] = useState('');
+    const [isAuthenticated] = useState(false);
 
     useEffect(() => {
         if (view === 'LEADERBOARD') return;
@@ -59,7 +60,7 @@ const Game = () => {
 
     if (view === 'LEADERBOARD') {
         return (
-            <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4">
+            <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4 relative">
                 <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
                     <div className="bg-gray-900 text-white p-6 text-center">
                         <h2 className="text-3xl font-bold">Таблиця лідерів</h2>
@@ -93,12 +94,14 @@ const Game = () => {
                         >
                             На головну
                         </button>
-                        <button
-                            onClick={() => navigate('/dashboard')}
-                            className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md"
-                        >
-                            В Дашборд
-                        </button>
+                        {isAuthenticated && (
+                            <button
+                                onClick={() => navigate('/dashboard')}
+                                className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md"
+                            >
+                                В Дашборд
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -106,7 +109,7 @@ const Game = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gray-100 flex flex-col">
+        <div className="min-h-screen bg-gray-100 flex flex-col relative">
             <header className="bg-white shadow-sm p-4 flex justify-between items-center z-10">
                 <div className="text-xl md:text-2xl font-black text-blue-600 tracking-tighter">KMAhoot!</div>
                 <div className="text-gray-500 font-bold text-sm md:text-base">Питання 1 з 15</div>
@@ -127,7 +130,6 @@ const Game = () => {
                         <span className="text-2xl font-black text-white">{timeLeft}</span>
                     </div>
 
-                    {/* Мобільний таймер зверху */}
                     <div className="absolute top-4 left-4 bg-purple-600 text-white px-3 py-1 rounded-full font-bold text-sm md:hidden">
                         Час: {timeLeft}
                     </div>
@@ -181,6 +183,7 @@ const Game = () => {
                     </div>
                 )}
             </main>
+
         </div>
     );
 };

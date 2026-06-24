@@ -5,6 +5,7 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Game from './pages/Game';
 import HostView from './pages/HostView';
+import QuizEditor from './pages/QuizEditor';
 
 const router = createBrowserRouter([
     {
@@ -30,6 +31,10 @@ const router = createBrowserRouter([
     {
         path: "/host/:pin",
         element: <HostView />,
+    },
+    {
+        path: "/create",
+        element: <QuizEditor />,
     },
 ]);
 

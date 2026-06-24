@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import Home from './pages/Home';
 import Lobby from './pages/Lobby';
 import Auth from './pages/Auth';
+import Dashboard from './pages/Dashboard';
 
 const router = createBrowserRouter([
     {
@@ -18,7 +19,7 @@ const router = createBrowserRouter([
     },
     {
         path: "/dashboard",
-        element: <div className="min-h-screen bg-gray-50 p-10 text-2xl font-bold"></div>,
+        element: <Dashboard />,
     }
 ]);
 

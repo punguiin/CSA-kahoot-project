@@ -1,12 +1,18 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
 const Lobby = () => {
     const { pin } = useParams();
     const navigate = useNavigate();
-    const [nickname, setNickname] = useState('');
-    const [isJoined, setIsJoined] = useState(false);
-    const [players, setPlayers] = useState<string[]>(['Микола', 'Назар', 'Нікіта']);
+    const location = useLocation();
+
+    const autoUsername = location.state?.username;
+
+    const [nickname, setNickname] = useState(autoUsername || '');
+    const [isJoined, setIsJoined] = useState(!!autoUsername);
+    const [players, setPlayers] = useState<string[]>(
+        autoUsername ? ['Микола', 'Назар', 'Нікіта', autoUsername] : ['Микола', 'Назар', 'Нікіта']
+    );
 
     const handleJoin = (e: React.FormEvent) => {
         e.preventDefault();

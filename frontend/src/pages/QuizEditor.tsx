@@ -119,8 +119,8 @@ const QuizEditor = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            <header className="bg-white shadow-sm p-4 flex justify-between items-center z-10 border-b border-gray-200">
+        <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+            <header className="bg-white shadow-sm p-4 flex justify-between items-center z-10 border-b border-gray-200 shrink-0">
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => navigate('/dashboard')}
@@ -155,8 +155,8 @@ const QuizEditor = () => {
             </header>
 
             <div className="flex-1 flex overflow-hidden">
-                <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-full">
-                    <div className="p-4 flex-1 overflow-y-auto">
+                <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
+                    <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
                         {questions.map((q, index) => (
                             <div
                                 key={q.id}
@@ -180,7 +180,7 @@ const QuizEditor = () => {
                             </div>
                         ))}
                     </div>
-                    <div className="p-4 border-t border-gray-100 bg-white shrink-0">
+                    <div className="p-4 border-t border-gray-200 bg-white shrink-0">
                         <button
                             onClick={handleAddQuestion}
                             className="w-full bg-blue-100 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-200 transition-colors flex justify-center items-center gap-2"

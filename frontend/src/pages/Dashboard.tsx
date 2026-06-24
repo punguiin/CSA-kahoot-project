@@ -55,7 +55,7 @@ const Dashboard = () => {
     const handleJoinGame = (e: React.FormEvent) => {
         e.preventDefault();
         if (joinPin.trim()) {
-            navigate(`/lobby/${joinPin}`);
+            navigate(`/lobby/${joinPin}`, { state: { username: 'user123' } });
         }
     };
 

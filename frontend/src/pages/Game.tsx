@@ -1,12 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const MOCK_QUESTION = {
-    id: 1,
-    text: "Який протокол використовується для безпечного передавання гіпертексту?",
-    answers: ["HTTP", "FTP", "HTTPS", "TCP/IP"],
-    timeLimit: 5
-};
+const MOCK_QUESTIONS = [
+    {
+        id: 1,
+        text: "Який протокол використовується для безпечного передавання гіпертексту?",
+        answers: ["HTTP", "FTP", "HTTPS", "TCP/IP"],
+        timeLimit: 5
+    },
+    {
+        id: 2,
+        text: "Що з переліченого НЕ є мовою програмування?",
+        answers: ["Java", "HTML", "Python", "C++"],
+        timeLimit: 5
+    }
+];
 
 const MOCK_LEADERBOARD = [
     { rank: 1, username: "nazar", score: 4500 },
@@ -31,22 +39,41 @@ const COLORS = [
 
 const Game = () => {
     const navigate = useNavigate();
-    const [timeLeft, setTimeLeft] = useState(MOCK_QUESTION.timeLimit);
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+    const [timeLeft, setTimeLeft] = useState(MOCK_QUESTIONS[0].timeLimit);
     const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-    const [view, setView] = useState<'QUESTION' | 'LEADERBOARD'>('QUESTION');
+    const [view, setView] = useState<'QUESTION' | 'LEADERBOARD' | 'PODIUM'>('QUESTION');
     const [errorMsg, setErrorMsg] = useState('');
     const [isAuthenticated] = useState(false);
+    const [isKicked] = useState(false);
+
+    const activeQuestion = MOCK_QUESTIONS[currentQuestionIndex];
 
     useEffect(() => {
-        if (view === 'LEADERBOARD') return;
+        if (isKicked) return;
 
-        if (timeLeft > 0) {
-            const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+        if (view === 'QUESTION') {
+            if (timeLeft > 0) {
+                const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+                return () => clearTimeout(timerId);
+            } else {
+                setView('LEADERBOARD');
+            }
+        } else if (view === 'LEADERBOARD') {
+            const timerId = setTimeout(() => {
+                if (currentQuestionIndex < MOCK_QUESTIONS.length - 1) {
+                    const nextIndex = currentQuestionIndex + 1;
+                    setCurrentQuestionIndex(nextIndex);
+                    setSelectedAnswer(null);
+                    setTimeLeft(MOCK_QUESTIONS[nextIndex].timeLimit);
+                    setView('QUESTION');
+                } else {
+                    setView('PODIUM');
+                }
+            }, 4000);
             return () => clearTimeout(timerId);
-        } else {
-            setView('LEADERBOARD');
         }
-    }, [timeLeft, view]);
+    }, [timeLeft, view, currentQuestionIndex, isKicked]);
 
     const handleAnswerClick = (index: number) => {
         if (selectedAnswer !== null) {
@@ -54,13 +81,91 @@ const Game = () => {
             setTimeout(() => setErrorMsg(''), 3000);
             return;
         }
-
         setSelectedAnswer(index);
     };
 
+    if (isKicked) {
+        return (
+            <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
+                <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-md w-full">
+                    <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-12 h-12 text-red-500">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </div>
+                    <h2 className="text-3xl font-black text-gray-800 mb-4">Гру завершено</h2>
+                    <p className="text-gray-600 mb-8 font-medium text-lg leading-snug">
+                        Адміністратор примусово завершив цю ігрову сесію.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                        <button
+                            onClick={() => navigate('/')}
+                            className="w-full bg-gray-100 text-gray-800 px-6 py-4 rounded-xl font-bold hover:bg-gray-200 transition-colors"
+                        >
+                            Повернутися на головну
+                        </button>
+                        {isAuthenticated && (
+                            <button
+                                onClick={() => navigate('/dashboard')}
+                                className="w-full bg-blue-600 text-white px-6 py-4 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-md"
+                            >
+                                Перейти в Дашборд
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (view === 'PODIUM') {
+        return (
+            <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4">
+                <h1 className="text-white text-5xl font-black mb-19 drop-shadow-lg text-center tracking-wide">
+                    Переможці:
+                </h1>
+
+                <div className="flex items-end justify-center gap-2 md:gap-4 h-64 md:h-80 mb-12 w-full max-w-3xl">
+                    <div className="w-1/3 bg-gray-300 h-[70%] rounded-t-lg shadow-2xl flex flex-col items-center pt-4 relative">
+                        <div className="absolute -top-6 bg-white rounded-full px-3 py-1 font-bold text-gray-500 shadow-sm text-sm">@{MOCK_LEADERBOARD[1].username}</div>
+                        <span className="text-5xl font-black text-gray-100 drop-shadow-md">2</span>
+                        <span className="mt-auto mb-4 font-bold text-gray-600">{MOCK_LEADERBOARD[1].score}</span>
+                    </div>
+                    <div className="w-1/3 bg-yellow-400 h-full rounded-t-lg shadow-2xl flex flex-col items-center pt-4 relative z-10 border-t-4 border-yellow-300">
+                        <div className="absolute -top-8 bg-white rounded-full px-4 py-1.5 font-black text-yellow-500 shadow-md">@{MOCK_LEADERBOARD[0].username}</div>
+                        <span className="text-7xl font-black text-yellow-200 drop-shadow-md">1</span>
+                        <span className="mt-auto mb-4 font-bold text-yellow-700 text-lg">{MOCK_LEADERBOARD[0].score}</span>
+                    </div>
+                    <div className="w-1/3 bg-orange-400 h-[50%] rounded-t-lg shadow-2xl flex flex-col items-center pt-4 relative">
+                        <div className="absolute -top-6 bg-white rounded-full px-3 py-1 font-bold text-orange-500 shadow-sm text-sm">@{MOCK_LEADERBOARD[2].username}</div>
+                        <span className="text-4xl font-black text-orange-200 drop-shadow-md">3</span>
+                        <span className="mt-auto mb-4 font-bold text-orange-800">{MOCK_LEADERBOARD[2].score}</span>
+                    </div>
+                </div>
+
+                <div className="flex justify-center gap-4 w-full max-w-md bg-white p-6 rounded-2xl shadow-xl">
+                    <button
+                        onClick={() => navigate('/')}
+                        className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-lg font-bold hover:bg-gray-200 transition-colors"
+                    >
+                        На головну
+                    </button>
+                    {isAuthenticated && (
+                        <button
+                            onClick={() => navigate('/dashboard')}
+                            className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md"
+                        >
+                            В Дашборд
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
     if (view === 'LEADERBOARD') {
         return (
-            <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4 relative">
+            <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center p-4">
                 <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
                     <div className="bg-gray-900 text-white p-6 text-center">
                         <h2 className="text-3xl font-bold">Таблиця лідерів</h2>
@@ -86,23 +191,6 @@ const Game = () => {
                             </div>
                         ))}
                     </div>
-
-                    <div className="p-6 border-t border-gray-100 flex justify-center gap-4">
-                        <button
-                            onClick={() => navigate('/')}
-                            className="bg-gray-100 text-gray-700 px-6 py-2.5 rounded-lg font-bold hover:bg-gray-200 transition-colors"
-                        >
-                            На головну
-                        </button>
-                        {isAuthenticated && (
-                            <button
-                                onClick={() => navigate('/dashboard')}
-                                className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md"
-                            >
-                                В Дашборд
-                            </button>
-                        )}
-                    </div>
                 </div>
             </div>
         );
@@ -112,7 +200,7 @@ const Game = () => {
         <div className="min-h-screen bg-gray-100 flex flex-col relative">
             <header className="bg-white shadow-sm p-4 flex justify-between items-center z-10">
                 <div className="text-xl md:text-2xl font-black text-blue-600 tracking-tighter">KMAhoot!</div>
-                <div className="text-gray-500 font-bold text-sm md:text-base">Питання 1 з 15</div>
+                <div className="text-gray-500 font-bold text-sm md:text-base">Питання {currentQuestionIndex + 1} з {MOCK_QUESTIONS.length}</div>
                 <div className="bg-gray-900 text-white px-4 py-1.5 rounded-full font-bold text-sm md:text-base">
                     PIN: 482910
                 </div>
@@ -135,12 +223,12 @@ const Game = () => {
                     </div>
 
                     <h1 className="text-xl md:text-3xl font-bold text-center text-gray-800 max-w-3xl leading-snug">
-                        {MOCK_QUESTION.text}
+                        {activeQuestion.text}
                     </h1>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-auto md:h-48">
-                    {MOCK_QUESTION.answers.map((answer, index) => {
+                    {activeQuestion.answers.map((answer, index) => {
                         const isSelected = selectedAnswer === index;
                         const isOtherSelected = selectedAnswer !== null && selectedAnswer !== index;
 
@@ -183,7 +271,6 @@ const Game = () => {
                     </div>
                 )}
             </main>
-
         </div>
     );
 };
